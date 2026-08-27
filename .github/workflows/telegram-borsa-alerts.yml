@@ -52,7 +52,14 @@ jobs:
           SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
           PYTHONUTF8: "1"
           PYTHONPATH: "."
+          GITHUB_ACTIONS: "true"
         run: |
+          # Non stampa i secret: solo se sono vuoti (caso tipico: Update secret senza Value)
+          if [ -z "${TELEGRAM_BOT_TOKEN}" ] || [ -z "${TELEGRAM_CHAT_ID}" ]; then
+            echo "::error::TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID vuoti. In Settings → Secrets reinsetta entrambi (non lasciare Value vuoto su Update)."
+            exit 1
+          fi
+          echo "telegram secrets: token_len=${#TELEGRAM_BOT_TOKEN} chat_len=${#TELEGRAM_CHAT_ID}"
           if [ "${{ github.event.inputs.test }}" = "true" ]; then
             python scripts/notify_borsa.py --test
           elif [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
