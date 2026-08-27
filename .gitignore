@@ -1,0 +1,17 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.streamlit/secrets.toml
+data/telegram_alerts_sent.json
+data/last_scan.json
+data/cik_cache.json
+data/.actions_keepalive
+*.log
+.DS_Store
+Thumbs.db

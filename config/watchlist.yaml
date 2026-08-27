@@ -1,0 +1,116 @@
+# Modalità ANTICIPO: segnali prima / all'inizio di un possibile salto.
+# Non predice il +7%; intercetta setup e gap precoce.
+#
+# Acceso: utili in arrivo, surprise, 8-K utili, pre/AH precoce, peer fermi, catalyst news
+# Spento: spike in seduta e momentum (sono “già salito”)
+
+watchlist:
+  - ticker: NVDA
+    name: NVIDIA
+    cik: "0001045810"
+  - ticker: AAPL
+    name: Apple
+    cik: "0000320193"
+  - ticker: MSFT
+    name: Microsoft
+    cik: "0000789019"
+  - ticker: GOOGL
+    name: Alphabet
+    cik: "0001652044"
+  - ticker: AMZN
+    name: Amazon
+    cik: "0001018724"
+  - ticker: META
+    name: Meta
+    cik: "0001326801"
+  - ticker: TSLA
+    name: Tesla
+    cik: "0001318605"
+  - ticker: AMD
+    name: AMD
+    cik: "0000002488"
+  - ticker: AVGO
+    name: Broadcom
+    cik: "0001730168"
+  - ticker: SMCI
+    name: Super Micro
+    cik: "0001375365"
+
+rules:
+  only_upside: true
+  enabled_tipos:
+    - earnings_soon
+    - earnings_surprise
+    - filing_8k
+    - extended_hours
+    - peer_lag
+    - news
+
+  # Gap precoce fuori seduta (prima dell'open USA)
+  extended_hours_pct: 1.5
+  # Leader del cluster già su; peer ancora fermi = possibile catch-up
+  peer_lag_leader_pct: 3.0
+  peer_lag_max_pct: 1.0
+
+  surprise_eps_pct: 3.0
+  surprise_revenue_pct: 2.5
+  earnings_lookahead_hours: 48
+
+  # Solo catalizzatori (niente chiacchiere generiche)
+  news_max_age_hours: 3
+  news_min_score: 5
+  news_keywords:
+    - [guidance, 5]
+    - [raised, 4]
+    - [raises, 4]
+    - [beat, 4]
+    - [beats, 4]
+    - [fda, 5]
+    - [approval, 4]
+    - [merger, 6]
+    - [acquisition, 6]
+    - [acquire, 5]
+    - [buyout, 6]
+    - [takeover, 6]
+    - [upgrade, 4]
+    - [record revenue, 5]
+  news_block_publishers:
+    - chartmill
+  news_boost_publishers:
+    - reuters
+    - bloomberg
+    - cnbc
+    - pr newswire
+    - business wire
+    - globenewswire
+    - associated press
+    - benzinga
+  news_opinion_publishers:
+    - seekingalpha
+    - seeking alpha
+    - motley fool
+  news_opinion_need:
+    - upgrade
+    - guidance
+    - beat
+    - fda
+    - merger
+    - acquisition
+
+  # Disattivati dalla whitelist, ma restano in config se li riaccendi
+  spike_pct: 8.0
+  spike_buckets: [8, 10, 15]
+  momentum_pct: 99.0
+  momentum_minutes: 30
+  filing_items_only: ["2.02", "1.01", "8.01", "7.01"]
+
+clusters:
+  - name: semis
+    tickers: [NVDA, AVGO, AMD, SMCI]
+  - name: megacap
+    tickers: [AAPL, MSFT, GOOGL, AMZN, META]
+
+edgar:
+  enabled: true
+  forms: ["8-K", "8-K/A"]
+  max_age_hours: 18
