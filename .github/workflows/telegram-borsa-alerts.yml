@@ -4,8 +4,8 @@ on:
   schedule:
     # Lun–ven: premarket USA → after-hours
     - cron: "*/15 8-23 * * 1-5"
-    # Sab–dom: news / filing / utili domenica sera (meno frequente)
-    - cron: "0 */2 8-22 * * 0,6"
+    # Sab–dom: ogni 2 ore (08–22 UTC) per news / filing
+    - cron: "0 8,10,12,14,16,18,20,22 * * 0,6"
     # Digest pre-apertura USA (~07:30 ET)
     - cron: "30 11 * * 1-5"
   workflow_dispatch:
