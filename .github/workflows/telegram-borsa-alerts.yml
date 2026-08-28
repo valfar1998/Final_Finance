@@ -2,8 +2,10 @@ name: Telegram borsa alerts
 
 on:
   schedule:
-    # Premarket USA (08 UTC) fino ad after-hours (~23 UTC), lun–ven
+    # Lun–ven: premarket USA → after-hours
     - cron: "*/15 8-23 * * 1-5"
+    # Sab–dom: news / filing / utili domenica sera (meno frequente)
+    - cron: "0 */2 8-22 * * 0,6"
     # Digest pre-apertura USA (~07:30 ET)
     - cron: "30 11 * * 1-5"
   workflow_dispatch:

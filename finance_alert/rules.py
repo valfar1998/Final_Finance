@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from finance_alert.config import AppConfig, Rules
 from finance_alert.models import Alert, EarningsEvent, Filing, NewsItem, Quote
+from finance_alert.swing import build_swing_plan
 
 HOUR_LABEL = {
     "bmo": "prima dell'apertura (BMO)",
@@ -49,16 +50,21 @@ def _news_score(item: NewsItem, rules: Rules) -> NewsItem | None:
     if any(block in pub for block in rules.news_block_publishers):
         return None
     text = item.headline.lower()
+    if any(block in text for block in rules.news_block_headline):
+        return None
     score = 0
     matched: list[str] = []
     for word, weight in rules.news_keywords:
         if word in text:
             score += weight
             matched.append(word)
-    if any(boost in pub for boost in rules.news_boost_publishers):
+    is_wire = any(boost in pub for boost in rules.news_boost_publishers)
+    if is_wire:
         score += 2
         if "wire" not in matched:
             matched.append("wire")
+    if rules.news_require_wire and not is_wire and score < rules.news_min_score + 2:
+        return None
     opinion = any(name in pub for name in rules.news_opinion_publishers)
     if opinion:
         need = set(rules.news_opinion_need or ["upgrade", "downgrade", "guidance", "beat", "miss", "fda", "merger"])
@@ -69,7 +75,43 @@ def _news_score(item: NewsItem, rules: Rules) -> NewsItem | None:
     item.matched = matched
     if score < rules.news_min_score:
         return None
+    if len(matched) < 2 and not is_wire:
+        return None
     return item
+
+
+def _attach_swing(
+    alert: Alert,
+    *,
+    cfg: AppConfig,
+    quotes: dict[str, Quote],
+    pct: float | None = None,
+    news_score: int = 0,
+    upside: bool = True,
+) -> Alert | None:
+    quote = quotes.get(alert.ticker.upper()) if alert.ticker != "*" else None
+    plan = build_swing_plan(
+        tipo=alert.tipo,
+        quote=quote,
+        pct=pct,
+        swing=cfg.rules.swing,
+        news_score=news_score,
+        upside=upside,
+    )
+    if plan is None:
+        if alert.tipo == "earnings_soon":
+            alert.setup_score = 4
+            alert.verdict = "SOLO WATCHLIST"
+            return alert if cfg.rules.swing.min_setup_score <= 4 else None
+        return alert
+    alert.setup_score = plan.score
+    alert.verdict = plan.verdict
+    body = alert.body.rstrip()
+    body += "\n\n" + "\n".join(plan.body_lines())
+    alert.body = body
+    if plan.score < cfg.rules.swing.min_setup_score:
+        return None
+    return alert
 
 
 def _hash(text: str) -> str:
@@ -143,19 +185,20 @@ def build_alerts(
                     continue
                 direction = "sopra stime" if upside else "sotto stime"
                 hint = (
-                    "Finestra tipica di gap rialzista (dopo chiusura / pre-open). "
-                    "Non è certo: è il catalizzatore ufficiale."
+                    "Catalizzatore ufficiale post-utili: spesso muove pre/open."
                     if upside
-                    else "Possibile gap ribassista (non certo)."
+                    else "Rischio gap ribassista."
                 )
+                price = quotes.get(ev.ticker.upper())
+                px = f"${price.price:.2f}" if price and price.price else "n.d."
                 alerts.append(
                     Alert(
                         key=f"earnings_surprise|{ev.ticker}|{ev.date}",
                         tipo="earnings_surprise",
                         ticker=ev.ticker,
-                        titolo=f"{ev.ticker} utili {direction}",
+                        titolo=f"{ev.ticker} — utili {direction}",
                         body=(
-                            f"{_name(cfg, ev.ticker)}\n"
+                            f"{_name(cfg, ev.ticker)} · ora {px}\n"
                             f"EPS {_fmt_eps(ev.eps_actual)} vs {_fmt_eps(ev.eps_estimate)} "
                             f"({_fmt_pct(eps_s)})\n"
                             f"Ricavi {_fmt_money(ev.revenue_actual)} vs {_fmt_money(ev.revenue_estimate)} "
@@ -172,15 +215,13 @@ def build_alerts(
                 key=f"earnings_soon|{ev.ticker}|{ev.date}",
                 tipo="earnings_soon",
                 ticker=ev.ticker,
-                titolo=f"{ev.ticker} riporta utili {when}",
+                titolo=f"{ev.ticker} — utili {when}",
                 body=(
-                    f"{_name(cfg, ev.ticker)} — {_label(ev.hour)}\n"
-                    f"Stima EPS {_fmt_eps(ev.eps_estimate)} · "
-                    f"stima ricavi {_fmt_money(ev.revenue_estimate)}\n"
-                    "SETUP: alta volatilità in arrivo. Non indica se salirà o scenderà; "
-                    "serve a essere pronti prima dell'annuncio."
+                    f"{_name(cfg, ev.ticker)} · {_label(ev.hour)}\n"
+                    f"Stima EPS {_fmt_eps(ev.eps_estimate)} · ricavi {_fmt_money(ev.revenue_estimate)}\n"
+                    "Volatilità in arrivo: tienilo in watchlist, non è un ingresso."
                 ),
-                severity="high",
+                severity="medium",
             )
         )
 
@@ -200,12 +241,11 @@ def build_alerts(
                     key=f"ext|{ticker}|{today.isoformat()}|{session}|up|{int(bucket)}",
                     tipo="extended_hours",
                     ticker=ticker,
-                    titolo=f"{ticker} {pct:+.1f}% {label} (gap precoce)",
+                    titolo=f"{ticker} — {pct:+.1f}% {label}",
                     body=(
-                        f"{_name(cfg, ticker)} {price} (fonte {quote.source})\n"
-                        "ANTICIPO OPEN: il movimento è già fuori seduta. "
-                        "Spesso precede il gap dell'apertura USA.\n"
-                        "Non è previsione: è prezzo già scambiato."
+                        f"{_name(cfg, ticker)} {price}\n"
+                        "Gap fuori seduta: spesso anticipa l'open USA.\n"
+                        "Valuta ingresso solo se il movimento non è già eccessivo."
                     ),
                     severity="high" if abs(pct) >= 3 else "medium",
                 )
@@ -259,18 +299,16 @@ def build_alerts(
         if not laggards:
             continue
         lag_txt = ", ".join(f"{t} {_fmt_pct(p)}" for t, p in laggards)
-        session = quotes[leader].session or "regular"
+        pick, pick_pct = laggards[0]
         alerts.append(
             Alert(
-                key=f"peer|{cluster.name}|{leader}|{today.isoformat()}",
+                key=f"peer|{cluster.name}|{leader}|{pick}|{today.isoformat()}",
                 tipo="peer_lag",
-                ticker=leader,
-                titolo=f"{cluster.name}: {leader} +{lead_pct:.1f}%, peer ancora fermi",
+                ticker=pick,
+                titolo=f"{pick} — catch-up vs {leader} ({cluster.name})",
                 body=(
-                    f"{_name(cfg, leader)} guida ({session}).\n"
-                    f"Possibile catch-up su: {lag_txt}\n"
-                    "Questo è il segnale più vicino a 'può salire prima che salga' "
-                    "per i peer — non è automatico."
+                    f"{leader} {_fmt_pct(lead_pct)} · {pick} {_fmt_pct(pick_pct)} · altri: {lag_txt}\n"
+                    "Idea swing: comprare il peer in ritardo se il settore resta forte."
                 ),
                 severity="high",
             )
@@ -308,14 +346,13 @@ def build_alerts(
                 key=f"news|{scored.ticker}|{ident}",
                 tipo="news",
                 ticker=scored.ticker,
-                titolo=f"{scored.ticker} — catalizzatore",
+                titolo=f"{scored.ticker} — catalizzatore wire",
                 body=(
                     f"{scored.headline}\n"
-                    f"Tag: {tags} · {pub}\n"
-                    "Catalizzatore ufficiale/wire: può muovere prima che il prezzo "
-                    "assorba tutto (soprattutto fuori seduta)."
+                    f"{pub} · tag: {tags}\n"
+                    "Notizia con impatto potenziale sul prezzo entro pochi giorni."
                 ),
-                severity="high" if scored.score >= 6 else "medium",
+                severity="high" if scored.score >= 7 else "medium",
                 url=scored.url or None,
             )
         )
@@ -353,6 +390,28 @@ def build_alerts(
     if rules.enabled_tipos:
         allowed = {t.lower() for t in rules.enabled_tipos}
         alerts = [a for a in alerts if a.tipo.lower() in allowed]
+
+    finalized: list[Alert] = []
+    for alert in alerts:
+        pct = None
+        if alert.ticker in quotes:
+            pct = quotes[alert.ticker].pct_from_close()
+        news_score = 0
+        if alert.tipo == "news":
+            for item in news:
+                if item.ticker == alert.ticker:
+                    news_score = max(news_score, item.score)
+        kept = _attach_swing(
+            alert,
+            cfg=cfg,
+            quotes=quotes,
+            pct=pct,
+            news_score=news_score,
+            upside=True,
+        )
+        if kept is not None:
+            finalized.append(kept)
+    alerts = finalized
 
     order = [
         "earnings_surprise",

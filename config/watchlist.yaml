@@ -1,8 +1,5 @@
-# Modalità ANTICIPO: segnali prima / all'inizio di un possibile salto.
-# Non predice il +7%; intercetta setup e gap precoce.
-#
-# Acceso: utili in arrivo, surprise, 8-K utili, pre/AH precoce, peer fermi, catalyst news
-# Spento: spike in seduta e momentum (sono “già salito”)
+# Modalità SWING: target ~2–3% in ~7 giorni.
+# Invia solo setup ≥ min_setup_score (default 6/10).
 
 watchlist:
   - ticker: NVDA
@@ -39,43 +36,65 @@ watchlist:
 rules:
   only_upside: true
   enabled_tipos:
-    - earnings_soon
     - earnings_surprise
     - filing_8k
     - extended_hours
     - peer_lag
     - news
 
-  # Gap precoce fuori seduta (prima dell'open USA)
+  swing:
+    target_pct: 2.5
+    stop_pct: 1.5
+    horizon_days: 7
+    min_setup_score: 6
+    chase_pct: 4.0
+    pullback_from_close_pct: 0.5
+
   extended_hours_pct: 1.5
-  # Leader del cluster già su; peer ancora fermi = possibile catch-up
-  peer_lag_leader_pct: 3.0
+  peer_lag_leader_pct: 2.5
   peer_lag_max_pct: 1.0
 
   surprise_eps_pct: 3.0
   surprise_revenue_pct: 2.5
   earnings_lookahead_hours: 48
 
-  # Solo catalizzatori (niente chiacchiere generiche)
-  news_max_age_hours: 3
-  news_min_score: 5
+  news_max_age_hours: 2
+  news_min_score: 7
+  news_require_wire: true
   news_keywords:
+    - [guidance raised, 8]
+    - [raises guidance, 8]
+    - [raised guidance, 8]
     - [guidance, 5]
-    - [raised, 4]
-    - [raises, 4]
-    - [beat, 4]
-    - [beats, 4]
-    - [fda, 5]
-    - [approval, 4]
-    - [merger, 6]
-    - [acquisition, 6]
-    - [acquire, 5]
-    - [buyout, 6]
-    - [takeover, 6]
-    - [upgrade, 4]
-    - [record revenue, 5]
+    - [beat estimates, 7]
+    - [beats estimates, 7]
+    - [fda approval, 8]
+    - [fda approves, 8]
+    - [merger, 8]
+    - [acquisition, 8]
+    - [to acquire, 7]
+    - [buyout, 8]
+    - [takeover, 8]
+    - [upgrade, 5]
+    - [downgrade, 5]
+    - [record revenue, 6]
+    - [partnership, 5]
+    - [contract, 5]
   news_block_publishers:
     - chartmill
+    - zacks
+    - investorplace
+  news_block_headline:
+    - "why "
+    - "could "
+    - "might "
+    - "should you"
+    - "top pick"
+    - "stock to buy"
+    - "analysis:"
+    - "opinion"
+    - "what to know"
+    - "here's why"
   news_boost_publishers:
     - reuters
     - bloomberg
@@ -85,6 +104,7 @@ rules:
     - globenewswire
     - associated press
     - benzinga
+    - wall street journal
   news_opinion_publishers:
     - seekingalpha
     - seeking alpha
@@ -97,7 +117,6 @@ rules:
     - merger
     - acquisition
 
-  # Disattivati dalla whitelist, ma restano in config se li riaccendi
   spike_pct: 8.0
   spike_buckets: [8, 10, 15]
   momentum_pct: 99.0

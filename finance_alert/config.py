@@ -25,6 +25,16 @@ class Ticker:
 
 
 @dataclass
+class SwingRules:
+    target_pct: float = 2.5
+    stop_pct: float = 1.5
+    horizon_days: int = 7
+    min_setup_score: int = 6
+    chase_pct: float = 4.0
+    pullback_from_close_pct: float = 0.5
+
+
+@dataclass
 class Rules:
     spike_pct: float = 3.0
     spike_buckets: list[float] = field(default_factory=lambda: [3, 5, 7, 10, 15])
@@ -47,6 +57,9 @@ class Rules:
     enabled_tipos: list[str] = field(default_factory=list)
     only_upside: bool = False
     filing_items_only: list[str] = field(default_factory=list)
+    news_require_wire: bool = False
+    news_block_headline: list[str] = field(default_factory=list)
+    swing: SwingRules = field(default_factory=SwingRules)
 
 
 @dataclass
@@ -98,6 +111,18 @@ def _keywords(raw: Any) -> list[tuple[str, int]]:
         elif isinstance(item, str) and item.strip():
             out.append((item.strip().lower(), 3))
     return out
+
+
+def _swing_rules(raw: Any) -> SwingRules:
+    data = raw if isinstance(raw, dict) else {}
+    return SwingRules(
+        target_pct=float(data.get("target_pct") or 2.5),
+        stop_pct=float(data.get("stop_pct") or 1.5),
+        horizon_days=int(data.get("horizon_days") or 7),
+        min_setup_score=int(data.get("min_setup_score") or 6),
+        chase_pct=float(data.get("chase_pct") or 4.0),
+        pullback_from_close_pct=float(data.get("pullback_from_close_pct") or 0.5),
+    )
 
 
 def _str_list(raw: Any) -> list[str]:
@@ -153,6 +178,9 @@ def load_config(path: Path | None = None) -> AppConfig:
         enabled_tipos=_str_list(raw_rules.get("enabled_tipos")),
         only_upside=bool(raw_rules.get("only_upside", False)),
         filing_items_only=[str(x).strip() for x in (raw_rules.get("filing_items_only") or []) if str(x).strip()],
+        news_require_wire=bool(raw_rules.get("news_require_wire", False)),
+        news_block_headline=_str_list(raw_rules.get("news_block_headline")),
+        swing=_swing_rules(raw_rules.get("swing")),
     )
     raw_edgar = data.get("edgar") or {}
     edgar = EdgarConfig(

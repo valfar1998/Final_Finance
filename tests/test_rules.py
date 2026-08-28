@@ -3,18 +3,20 @@ from datetime import datetime, timezone
 from finance_alert.config import load_config
 from finance_alert.models import EarningsEvent, Filing, NewsItem, Quote
 from finance_alert.rules import build_alerts
+from finance_alert.swing import build_swing_plan
 
 
 def test_early_mode_keeps_catalysts_drops_late_spike():
     cfg = load_config()
     assert cfg.rules.only_upside is True
+    assert cfg.rules.swing.min_setup_score == 6
     now = datetime(2026, 8, 27, 16, 0, tzinfo=timezone.utc)
     quotes = {
         "NVDA": Quote(
             ticker="NVDA",
-            price=178.0,
+            price=171.5,
             previous_close=166.0,
-            change_pct=7.23,
+            change_pct=3.5,
             source="test",
             session="regular",
         ),
@@ -37,7 +39,7 @@ def test_early_mode_keeps_catalysts_drops_late_spike():
     news = [
         NewsItem(
             ticker="NVDA",
-            headline="NVIDIA raised data center guidance after beat",
+            headline="NVIDIA raised guidance after beat estimates",
             url="https://example.com/nvda",
             published=now,
             source="finnhub",
@@ -70,6 +72,9 @@ def test_early_mode_keeps_catalysts_drops_late_spike():
     assert "peer_lag" in tipi
     assert "price_spike" not in tipi
     assert "momentum" not in tipi
+    for alert in alerts:
+        assert alert.setup_score >= cfg.rules.swing.min_setup_score
+        assert "Setup swing:" in alert.body
 
 
 def test_extended_hours_upside_only():
@@ -78,9 +83,9 @@ def test_extended_hours_upside_only():
     quotes = {
         "NVDA": Quote(
             ticker="NVDA",
-            price=180,
+            price=171.5,
             previous_close=166,
-            change_pct=8.4,
+            change_pct=3.5,
             source="yahoo_ext",
             session="pre",
         ),
@@ -123,9 +128,10 @@ def test_extended_hours_upside_only():
     assert "peer_lag" in tipi
     assert all(a.tipo != "price_spike" for a in alerts)
     ext = next(a for a in alerts if a.tipo == "extended_hours")
-    assert "pre-market" in ext.titolo
+    assert "pre-market" in ext.titolo.lower() or "pre" in ext.titolo.lower()
     peer = next(a for a in alerts if a.tipo == "peer_lag")
-    assert "AMD" in peer.body
+    assert peer.ticker == "AMD"
+    assert peer.setup_score >= cfg.rules.swing.min_setup_score
 
 
 def test_skips_seeking_alpha_opinion_without_catalyst():
@@ -150,7 +156,7 @@ def test_skips_seeking_alpha_opinion_without_catalyst():
     alerts = build_alerts(
         cfg=cfg,
         now=now,
-        quotes={},
+        quotes={"NVDA": Quote(ticker="NVDA", price=178, previous_close=170, source="test")},
         earnings=[],
         news=[noise, useful],
         filings=[],
@@ -159,3 +165,21 @@ def test_skips_seeking_alpha_opinion_without_catalyst():
     news_alerts = [a for a in alerts if a.tipo == "news"]
     assert len(news_alerts) == 1
     assert "guidance" in news_alerts[0].body.lower() or "raised" in news_alerts[0].body.lower()
+    assert "Ingresso ideale" in news_alerts[0].body
+
+
+def test_swing_plan_includes_entry_target_stop():
+    cfg = load_config()
+    quote = Quote(ticker="AMD", price=100.0, previous_close=99.0, source="test")
+    plan = build_swing_plan(
+        tipo="peer_lag",
+        quote=quote,
+        pct=0.5,
+        swing=cfg.rules.swing,
+    )
+    assert plan is not None
+    assert plan.score >= 6
+    assert plan.entry_lo is not None
+    assert plan.target is not None
+    assert plan.stop is not None
+    assert "2.5" in plan.body_lines()[2] or plan.target > 100

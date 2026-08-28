@@ -90,6 +90,8 @@ class Alert:
     body: str
     severity: str = "medium"
     url: str | None = None
+    setup_score: int = 0
+    verdict: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
