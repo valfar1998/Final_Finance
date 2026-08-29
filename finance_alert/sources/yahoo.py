@@ -6,22 +6,40 @@ import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from typing import Any
 
-from finance_alert.http import DEFAULT_UA, HttpError, get_json, get_text
+from finance_alert.http import DEFAULT_UA, HttpError, get_json, get_text, map_parallel
 from finance_alert.models import NewsItem, Quote, parse_num
 
 CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
 RSS = "https://feeds.finance.yahoo.com/rss/2.0/headline"
 
+# Cache breve delle risposte chart (session + momentum condividono le barre 5m).
+_CHART_TTL_SEC = 55.0
+_chart_cache: dict[tuple[str, str, str], tuple[float, Any]] = {}
 
-def fetch_quote(ticker: str) -> Quote | None:
+
+def _chart_json(ticker: str, *, interval: str, range_: str) -> Any | None:
+    key = (ticker.upper(), interval, range_)
+    now = time.time()
+    hit = _chart_cache.get(key)
+    if hit and now - hit[0] < _CHART_TTL_SEC:
+        return hit[1]
     try:
         data = get_json(
             CHART.format(ticker=ticker),
-            params={"interval": "1d", "range": "5d", "includePrePost": "true"},
+            params={"interval": interval, "range": range_, "includePrePost": "true"},
             headers={"User-Agent": DEFAULT_UA, "Referer": "https://finance.yahoo.com/"},
         )
     except (HttpError, OSError, TimeoutError, ValueError):
+        return None
+    _chart_cache[key] = (now, data)
+    return data
+
+
+def fetch_quote(ticker: str) -> Quote | None:
+    data = _chart_json(ticker, interval="1d", range_="5d")
+    if data is None:
         return None
     try:
         block = data["chart"]["result"][0]
@@ -59,14 +77,10 @@ def fetch_quote(ticker: str) -> Quote | None:
 
 
 def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
-    out: dict[str, Quote] = {}
-    for i, ticker in enumerate(tickers):
-        quote = fetch_quote(ticker)
-        if quote:
-            out[ticker] = quote
-        if i + 1 < len(tickers):
-            time.sleep(0.25)
-    return out
+    if not tickers:
+        return {}
+    results = map_parallel(fetch_quote, tickers, max_workers=min(6, len(tickers)))
+    return {q.ticker: q for q in results if q is not None}
 
 
 def _session_from_meta(meta: dict, now_ts: int) -> str:
@@ -89,13 +103,8 @@ def _session_from_meta(meta: dict, now_ts: int) -> str:
 
 def fetch_session_quote(ticker: str) -> Quote | None:
     """Pre-market / after-hours vs chiusura precedente (barre 5 min + prepost)."""
-    try:
-        data = get_json(
-            CHART.format(ticker=ticker),
-            params={"interval": "5m", "range": "1d", "includePrePost": "true"},
-            headers={"User-Agent": DEFAULT_UA, "Referer": "https://finance.yahoo.com/"},
-        )
-    except (HttpError, OSError, TimeoutError, ValueError):
+    data = _chart_json(ticker, interval="5m", range_="1d")
+    if data is None:
         return None
     try:
         block = data["chart"]["result"][0]
@@ -140,25 +149,16 @@ def fetch_session_quote(ticker: str) -> Quote | None:
 
 
 def fetch_session_quotes(tickers: list[str]) -> dict[str, Quote]:
-    out: dict[str, Quote] = {}
-    for i, ticker in enumerate(tickers):
-        quote = fetch_session_quote(ticker)
-        if quote:
-            out[ticker] = quote
-        if i + 1 < len(tickers):
-            time.sleep(0.2)
-    return out
+    if not tickers:
+        return {}
+    results = map_parallel(fetch_session_quote, tickers, max_workers=min(6, len(tickers)))
+    return {q.ticker: q for q in results if q is not None}
 
 
 def fetch_momentum_pct(ticker: str, minutes: int = 30) -> float | None:
     """Variazione % sulle ultime N minuti (barre 5m)."""
-    try:
-        data = get_json(
-            CHART.format(ticker=ticker),
-            params={"interval": "5m", "range": "1d", "includePrePost": "true"},
-            headers={"User-Agent": DEFAULT_UA, "Referer": "https://finance.yahoo.com/"},
-        )
-    except (HttpError, OSError, TimeoutError, ValueError):
+    data = _chart_json(ticker, interval="5m", range_="1d")
+    if data is None:
         return None
     try:
         block = data["chart"]["result"][0]

@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-import time
 from finance_alert.config import Ticker
 from finance_alert.env import ROOT, env_key
-from finance_alert.http import HttpError, get_json
+from finance_alert.http import HttpError, get_json, map_parallel
 from finance_alert.models import Filing
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
@@ -64,47 +63,63 @@ def resolve_cik(tickers: list[Ticker]) -> dict[str, str]:
     return {t.ticker: mapping[t.ticker] for t in tickers if t.ticker in mapping}
 
 
+def _filings_for_ticker(
+    item: Ticker,
+    cik: str,
+    wanted: set[str],
+    limit: int,
+) -> list[Filing]:
+    try:
+        data = get_json(SUBMISSIONS.format(cik=cik), headers=_headers(), timeout=25)
+    except (HttpError, OSError, TimeoutError, ValueError):
+        return []
+    recent = ((data or {}).get("filings") or {}).get("recent") or {}
+    forms_col = recent.get("form") or []
+    acc_col = recent.get("accessionNumber") or []
+    date_col = recent.get("filingDate") or []
+    items_col = recent.get("items") or [""] * len(forms_col)
+    primary = recent.get("primaryDocument") or [""] * len(forms_col)
+    out: list[Filing] = []
+    for form, acc, filed, items, doc in zip(
+        forms_col, acc_col, date_col, items_col, primary
+    ):
+        if str(form).upper() not in wanted:
+            continue
+        acc_s = str(acc)
+        acc_path = acc_s.replace("-", "")
+        url = (
+            f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
+            f"{acc_path}/{doc or acc_s + '-index.html'}"
+        )
+        out.append(
+            Filing(
+                ticker=item.ticker,
+                form=str(form),
+                accession=acc_s,
+                filed=str(filed)[:10],
+                items=str(items or ""),
+                url=url,
+            )
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
 def fetch_filings(tickers: list[Ticker], forms: list[str], limit: int = 8) -> list[Filing]:
     cik_map = resolve_cik(tickers)
     wanted = {f.upper() for f in forms}
+    jobs = [(item, cik_map[item.ticker]) for item in tickers if item.ticker in cik_map]
+    if not jobs:
+        return []
+
+    def _one(pair: tuple[Ticker, str]) -> list[Filing]:
+        item, cik = pair
+        return _filings_for_ticker(item, cik, wanted, limit)
+
+    # SEC tollera ~10 req/s; pochi worker evitano 429
+    batches = map_parallel(_one, jobs, max_workers=min(4, len(jobs)))
     out: list[Filing] = []
-    for i, item in enumerate(tickers):
-        cik = cik_map.get(item.ticker)
-        if not cik:
-            continue
-        try:
-            data = get_json(SUBMISSIONS.format(cik=cik), headers=_headers(), timeout=25)
-        except (HttpError, OSError, TimeoutError, ValueError):
-            continue
-        recent = ((data or {}).get("filings") or {}).get("recent") or {}
-        forms_col = recent.get("form") or []
-        acc_col = recent.get("accessionNumber") or []
-        date_col = recent.get("filingDate") or []
-        items_col = recent.get("items") or [""] * len(forms_col)
-        primary = recent.get("primaryDocument") or [""] * len(forms_col)
-        for form, acc, filed, items, doc in zip(
-            forms_col, acc_col, date_col, items_col, primary
-        ):
-            if str(form).upper() not in wanted:
-                continue
-            acc_s = str(acc)
-            acc_path = acc_s.replace("-", "")
-            url = (
-                f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
-                f"{acc_path}/{doc or acc_s + '-index.html'}"
-            )
-            out.append(
-                Filing(
-                    ticker=item.ticker,
-                    form=str(form),
-                    accession=acc_s,
-                    filed=str(filed)[:10],
-                    items=str(items or ""),
-                    url=url,
-                )
-            )
-            if sum(1 for f in out if f.ticker == item.ticker) >= limit:
-                break
-        if i + 1 < len(tickers):
-            time.sleep(0.15)
+    for batch in batches:
+        out.extend(batch)
     return out

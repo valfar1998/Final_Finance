@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import time
 from datetime import datetime, timezone
 
 from finance_alert.env import env_key
-from finance_alert.http import HttpError, get_json
+from finance_alert.http import HttpError, get_json, map_parallel
 from finance_alert.models import EarningsEvent, NewsItem, Quote, parse_num
 
 BASE = "https://finnhub.io/api/v1"
@@ -50,14 +49,10 @@ def fetch_quote(ticker: str) -> Quote | None:
 
 
 def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
-    out: dict[str, Quote] = {}
-    for i, ticker in enumerate(tickers):
-        quote = fetch_quote(ticker)
-        if quote:
-            out[ticker] = quote
-        if i + 1 < len(tickers):
-            time.sleep(0.12)
-    return out
+    if not available() or not tickers:
+        return {}
+    results = map_parallel(fetch_quote, tickers, max_workers=min(8, len(tickers)))
+    return {q.ticker: q for q in results if q is not None}
 
 
 def fetch_earnings(from_date: str, to_date: str, tickers: list[str]) -> list[EarningsEvent]:
@@ -78,12 +73,12 @@ def fetch_earnings(from_date: str, to_date: str, tickers: list[str]) -> list[Ear
     for row in rows:
         if not isinstance(row, dict):
             continue
-        symbol = str(row.get("symbol") or "").upper()
-        if symbol not in wanted:
+        sym = str(row.get("symbol") or "").upper()
+        if sym not in wanted:
             continue
         events.append(
             EarningsEvent(
-                ticker=symbol,
+                ticker=sym,
                 date=str(row.get("date") or "")[:10],
                 hour=str(row.get("hour") or ""),
                 eps_actual=parse_num(row.get("epsActual")),
@@ -121,9 +116,10 @@ def fetch_news(ticker: str, from_date: str, to_date: str) -> list[NewsItem]:
         if not headline:
             continue
         published = None
-        if row.get("datetime"):
+        raw_t = row.get("datetime")
+        if raw_t:
             try:
-                published = datetime.fromtimestamp(int(row["datetime"]), tz=timezone.utc)
+                published = datetime.fromtimestamp(int(raw_t), tz=timezone.utc)
             except (TypeError, ValueError, OSError):
                 published = None
         items.append(

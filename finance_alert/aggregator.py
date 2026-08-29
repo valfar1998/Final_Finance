@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from finance_alert.config import AppConfig
+from finance_alert.http import map_parallel
 from finance_alert.models import EarningsEvent, Filing, NewsItem, Quote
 from finance_alert.sources import edgar, finnhub, fmp, polygon, twelve, yahoo
 
@@ -22,16 +23,18 @@ def source_status() -> dict[str, bool]:
 
 
 def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
+    """Preferisce provider batch (FMP/Twelve), poi Finnhub/Polygon, Yahoo ultima rete."""
     merged: dict[str, Quote] = {}
     providers = []
+    # Batch-first: 1 HTTP per tutta la watchlist
+    if fmp.available():
+        providers.append(("fmp", fmp.fetch_quotes))
+    if twelve.available():
+        providers.append(("twelve", twelve.fetch_quotes))
     if finnhub.available():
         providers.append(("finnhub", finnhub.fetch_quotes))
     if polygon.available():
         providers.append(("polygon", polygon.fetch_quotes))
-    if twelve.available():
-        providers.append(("twelve", twelve.fetch_quotes))
-    if fmp.available():
-        providers.append(("fmp", fmp.fetch_quotes))
     providers.append(("yahoo", yahoo.fetch_quotes))
 
     missing = list(tickers)
@@ -91,21 +94,28 @@ def _dedupe_news(items: list[NewsItem]) -> list[NewsItem]:
     return out
 
 
+def _news_for_ticker(args: tuple[str, str, str]) -> list[NewsItem]:
+    ticker, frm, to = args
+    batch: list[NewsItem] = []
+    if finnhub.available():
+        batch.extend(finnhub.fetch_news(ticker, frm, to))
+    if polygon.available() and len(batch) < 5:
+        batch.extend(polygon.fetch_news(ticker))
+    if fmp.available() and len(batch) < 5:
+        batch.extend(fmp.fetch_news(ticker))
+    if len(batch) < 3:
+        batch.extend(yahoo.fetch_news(ticker))
+    return batch
+
+
 def fetch_news(cfg: AppConfig, now: datetime) -> list[NewsItem]:
     today = now.date()
     frm = (today - timedelta(days=1)).isoformat()
     to = today.isoformat()
+    jobs = [(ticker, frm, to) for ticker in cfg.symbols]
+    batches = map_parallel(_news_for_ticker, jobs, max_workers=min(6, max(1, len(jobs))))
     items: list[NewsItem] = []
-    for ticker in cfg.symbols:
-        batch: list[NewsItem] = []
-        if finnhub.available():
-            batch.extend(finnhub.fetch_news(ticker, frm, to))
-        if polygon.available() and len(batch) < 5:
-            batch.extend(polygon.fetch_news(ticker))
-        if fmp.available() and len(batch) < 5:
-            batch.extend(fmp.fetch_news(ticker))
-        if len(batch) < 3:
-            batch.extend(yahoo.fetch_news(ticker))
+    for batch in batches:
         items.extend(batch)
     cutoff = now.astimezone(timezone.utc) - timedelta(hours=cfg.rules.news_max_age_hours)
     fresh: list[NewsItem] = []
@@ -119,12 +129,11 @@ def fetch_news(cfg: AppConfig, now: datetime) -> list[NewsItem]:
 
 
 def fetch_momentum(tickers: list[str], minutes: int) -> dict[str, float]:
-    out: dict[str, float] = {}
-    for ticker in tickers:
-        pct = yahoo.fetch_momentum_pct(ticker, minutes=minutes)
-        if pct is not None:
-            out[ticker] = pct
-    return out
+    def _one(ticker: str) -> tuple[str, float | None]:
+        return ticker, yahoo.fetch_momentum_pct(ticker, minutes=minutes)
+
+    results = map_parallel(_one, tickers, max_workers=min(6, max(1, len(tickers))))
+    return {t: pct for t, pct in results if pct is not None}
 
 
 def fetch_filings(cfg: AppConfig) -> list[Filing]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -124,11 +125,19 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
     cfg = cfg or load_config()
     now = _now_utc()
     sources = source_status()
-    quotes = fetch_quotes(cfg.symbols)
+
+    # Quote + earnings + news + filings sono indipendenti → in parallelo
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        f_quotes = pool.submit(fetch_quotes, cfg.symbols)
+        f_earn = pool.submit(fetch_earnings, cfg, now)
+        f_news = pool.submit(fetch_news, cfg, now)
+        f_filings = pool.submit(fetch_filings, cfg)
+        quotes = f_quotes.result()
+        earnings = f_earn.result()
+        news = f_news.result()
+        filings = f_filings.result()
+
     quotes = overlay_extended_hours(quotes, cfg.symbols)
-    earnings = fetch_earnings(cfg, now)
-    news = fetch_news(cfg, now)
-    filings = fetch_filings(cfg)
 
     movers = []
     for ticker, quote in quotes.items():

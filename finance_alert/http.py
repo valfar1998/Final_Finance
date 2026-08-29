@@ -5,12 +5,36 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable, TypeVar
 
 DEFAULT_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
+
+T = TypeVar("T")
+R = TypeVar("R")
+
+
+def map_parallel(
+    fn: Callable[[T], R],
+    items: list[T],
+    *,
+    max_workers: int = 8,
+) -> list[R]:
+    """Applica fn su items in parallelo (ordine stabile)."""
+    if not items:
+        return []
+    if len(items) == 1:
+        return [fn(items[0])]
+    workers = max(1, min(max_workers, len(items)))
+    out: list[R] = [None] * len(items)  # type: ignore[list-item]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(fn, item): idx for idx, item in enumerate(items)}
+        for fut in as_completed(futures):
+            out[futures[fut]] = fut.result()
+    return out
 
 
 class HttpError(RuntimeError):
