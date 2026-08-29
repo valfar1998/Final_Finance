@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from finance_alert.config import AppConfig
 from finance_alert.http import map_parallel
 from finance_alert.models import EarningsEvent, Filing, NewsItem, Quote
-from finance_alert.sources import edgar, finnhub, fmp, newsapi, polygon, twelve, yahoo
+from finance_alert.sources import edgar, finnhub, fmp, marketaux, newsapi, polygon, twelve, yahoo
 
 
 def source_status() -> dict[str, bool]:
@@ -17,6 +17,7 @@ def source_status() -> dict[str, bool]:
         "twelve_data": twelve.available(),
         "polygon": polygon.available(),
         "newsapi": newsapi.available(),
+        "marketaux": marketaux.available(),
         "yahoo_chart": True,
         "sec_edgar": True,
         "yahoo_rss": True,
@@ -102,6 +103,8 @@ def _news_for_ticker(args: tuple[str, str, str]) -> list[NewsItem]:
         batch.extend(finnhub.fetch_news(ticker, frm, to))
     if polygon.available() and len(batch) < 5:
         batch.extend(polygon.fetch_news(ticker))
+    if marketaux.available() and len(batch) < 8:
+        batch.extend(marketaux.fetch_news(ticker))
     if newsapi.available() and len(batch) < 8:
         batch.extend(newsapi.fetch_news(ticker, frm))
     if fmp.available() and len(batch) < 5:

@@ -81,7 +81,7 @@ Watchlist e soglie: `config/watchlist.yaml`.
    - `TELEGRAM_BOT_TOKEN`
    - `TELEGRAM_CHAT_ID`
    - `FINNHUB_API_KEY`
-   - opzionali: `FMP_API_KEY`, `TWELVE_DATA_API_KEY`, `POLYGON_API_KEY`, `NEWSAPI_API_KEY`, `SEC_CONTACT_EMAIL`
+   - opzionali: `FMP_API_KEY`, `TWELVE_DATA_API_KEY`, `POLYGON_API_KEY`, `NEWSAPI_API_KEY`, `MARKETAUX_API_TOKEN`, `SEC_CONTACT_EMAIL`
 2. Workflow `Telegram borsa alerts`: ogni 15 min **pre-market → after-hours USA** (08–23 UTC, lun–ven) + digest pre-open
 3. Dopo il primo push: Actions → workflow → **Run workflow** (test = true) per verificare Telegram
 
