@@ -29,6 +29,8 @@ class LlmRules:
     enabled: bool = True
     prefilter_score: int = 4
     min_llm_score: int = 6
+    timeout_sec: float = 3.0
+    fallback_keyword_score: int = 8
 
 
 @dataclass
@@ -37,6 +39,19 @@ class VolumeRules:
     require_for_extended: bool = True
     require_for_spike: bool = True
     peer_leader_min_rvol: float = 2.5
+    min_dollar_volume: float = 250_000.0
+    min_dollar_volume_high_beta: float = 500_000.0
+    require_dollar_volume_extended: bool = True
+    require_dollar_volume_peer: bool = True
+
+
+@dataclass
+class MacroRules:
+    enabled: bool = True
+    etfs: list[str] = field(default_factory=lambda: ["SPY", "QQQ"])
+    stress_pct: float = -1.5
+    normal_min_setup_score: int = 6
+    stressed_min_setup_score: int = 8
 
 
 @dataclass
@@ -85,6 +100,7 @@ class Rules:
     volume: VolumeRules = field(default_factory=VolumeRules)
     dedupe: DedupeRules = field(default_factory=DedupeRules)
     peer_resistance: bool = True
+    macro: MacroRules = field(default_factory=MacroRules)
 
 
 @dataclass
@@ -144,6 +160,8 @@ def _llm_rules(raw: Any) -> LlmRules:
         enabled=bool(data.get("enabled", True)),
         prefilter_score=int(data.get("prefilter_score") or 4),
         min_llm_score=int(data.get("min_llm_score") or 6),
+        timeout_sec=float(data.get("timeout_sec") or 3.0),
+        fallback_keyword_score=int(data.get("fallback_keyword_score") or 8),
     )
 
 
@@ -154,6 +172,22 @@ def _volume_rules(raw: Any) -> VolumeRules:
         require_for_extended=bool(data.get("require_for_extended", True)),
         require_for_spike=bool(data.get("require_for_spike", True)),
         peer_leader_min_rvol=float(data.get("peer_leader_min_rvol") or 2.5),
+        min_dollar_volume=float(data.get("min_dollar_volume") or 250_000),
+        min_dollar_volume_high_beta=float(data.get("min_dollar_volume_high_beta") or 500_000),
+        require_dollar_volume_extended=bool(data.get("require_dollar_volume_extended", True)),
+        require_dollar_volume_peer=bool(data.get("require_dollar_volume_peer", True)),
+    )
+
+
+def _macro_rules(raw: Any, swing: SwingRules) -> MacroRules:
+    data = raw if isinstance(raw, dict) else {}
+    etfs = data.get("etfs") or ["SPY", "QQQ"]
+    return MacroRules(
+        enabled=bool(data.get("enabled", True)),
+        etfs=[str(x).strip().upper() for x in etfs if str(x).strip()],
+        stress_pct=float(data.get("stress_pct") or -1.5),
+        normal_min_setup_score=int(data.get("normal_min_setup_score") or swing.min_setup_score),
+        stressed_min_setup_score=int(data.get("stressed_min_setup_score") or 8),
     )
 
 
@@ -207,6 +241,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         watchlist = [Ticker(ticker="NVDA", name="NVIDIA", cik="0001045810")]
 
     raw_rules = data.get("rules") or {}
+    swing = _swing_rules(raw_rules.get("swing"))
     rules = Rules(
         spike_pct=float(os.getenv("SPIKE_PCT") or raw_rules.get("spike_pct") or 3.0),
         spike_buckets=[float(x) for x in (raw_rules.get("spike_buckets") or [3, 5, 7, 10, 15])],
@@ -232,11 +267,12 @@ def load_config(path: Path | None = None) -> AppConfig:
         filing_items_only=[str(x).strip() for x in (raw_rules.get("filing_items_only") or []) if str(x).strip()],
         news_require_wire=bool(raw_rules.get("news_require_wire", False)),
         news_block_headline=_str_list(raw_rules.get("news_block_headline")),
-        swing=_swing_rules(raw_rules.get("swing")),
+        swing=swing,
         llm=_llm_rules(raw_rules.get("llm")),
         volume=_volume_rules(raw_rules.get("volume")),
         dedupe=_dedupe_rules(raw_rules.get("dedupe")),
         peer_resistance=bool(raw_rules.get("peer_resistance", True)),
+        macro=_macro_rules(raw_rules.get("macro"), swing),
     )
     raw_edgar = data.get("edgar") or {}
     edgar = EdgarConfig(

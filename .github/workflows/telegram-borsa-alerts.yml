@@ -41,10 +41,12 @@ jobs:
       - uses: actions/cache/restore@v4
         if: ${{ github.event.inputs.test != 'true' }}
         with:
-          path: data/telegram_alerts_sent.json
-          key: telegram-borsa-sent-${{ github.run_id }}
+          path: |
+            data/telegram_alerts_sent.json
+            data/rvol_baseline.json
+          key: telegram-borsa-state-${{ github.run_id }}
           restore-keys: |
-            telegram-borsa-sent-
+            telegram-borsa-state-
 
       - name: Borsa → Telegram
         env:
@@ -80,7 +82,9 @@ jobs:
           fi
 
       - uses: actions/cache/save@v4
-        if: always() && hashFiles('data/telegram_alerts_sent.json') != ''
+        if: always() && (hashFiles('data/telegram_alerts_sent.json') != '' || hashFiles('data/rvol_baseline.json') != '')
         with:
-          path: data/telegram_alerts_sent.json
-          key: telegram-borsa-sent-${{ github.run_id }}
+          path: |
+            data/telegram_alerts_sent.json
+            data/rvol_baseline.json
+          key: telegram-borsa-state-${{ github.run_id }}

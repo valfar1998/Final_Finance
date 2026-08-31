@@ -11,6 +11,7 @@ __pycache__/
 data/telegram_alerts_sent.json
 data/last_scan.json
 data/cik_cache.json
+data/rvol_baseline.json
 # data/.actions_keepalive è tracciato apposta dal workflow keepalive
 *.log
 .DS_Store

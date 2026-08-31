@@ -125,7 +125,7 @@ if run_scan_clicked:
         f"su {len(result.alerts)} totali (non inviati)."
     )
     st.session_state["scan_text"] = (
-        format_alerts(result.fresh, result.now) if result.fresh else "Nessun alert nuovo."
+        format_alerts(result.fresh, result.now, macro_stress=result.macro_stress) if result.fresh else "Nessun alert nuovo."
     )
     st.rerun()
 

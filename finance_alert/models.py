@@ -26,6 +26,7 @@ class Quote:
     volume: float | None = None
     avg_volume: float | None = None
     rvol: float | None = None
+    dollar_volume: float | None = None
 
     def pct_from_close(self) -> float | None:
         if self.change_pct is not None:
@@ -73,6 +74,7 @@ class NewsItem:
     matched: list[str] = field(default_factory=list)
     llm_driver: str = ""
     llm_provider: str = ""
+    llm_unverified: bool = False
 
 
 @dataclass
@@ -97,6 +99,7 @@ class Alert:
     url: str | None = None
     setup_score: int = 0
     verdict: str = ""
+    tags: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)

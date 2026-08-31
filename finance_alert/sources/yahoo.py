@@ -200,8 +200,120 @@ def _day_key(ts: int, meta: dict) -> str:
         return datetime.fromtimestamp(int(ts), tz=timezone.utc).date().isoformat()
 
 
+def _slot_key(ts: int, meta: dict) -> str:
+    try:
+        tz = meta.get("exchangeTimezoneName") or "America/New_York"
+        from zoneinfo import ZoneInfo
+
+        when = datetime.fromtimestamp(int(ts), tz=ZoneInfo(str(tz)))
+        return when.strftime("%H:%M")
+    except (TypeError, ValueError, OSError):
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%H:%M")
+
+
+def _bar_in_session(ts: int, meta: dict, session: str) -> bool:
+    periods = meta.get("currentTradingPeriod") or {}
+    pre = periods.get("pre") or {}
+    post = periods.get("post") or {}
+    regular = periods.get("regular") or {}
+    if session == "pre":
+        if pre.get("start") is not None and pre.get("end") is not None:
+            return int(pre["start"]) <= int(ts) < int(pre["end"])
+        return regular.get("start") is not None and int(ts) < int(regular["start"])
+    if session == "post":
+        if post.get("start") is not None and post.get("end") is not None:
+            return int(post["start"]) <= int(ts) < int(post["end"])
+        return regular.get("end") is not None and int(ts) >= int(regular["end"])
+    if regular.get("start") is not None and regular.get("end") is not None:
+        return int(regular["start"]) <= int(ts) < int(regular["end"])
+    return False
+
+
+def _collect_session_series(
+    data: Any,
+    session: str,
+) -> tuple[dict[str, float], dict[str, list[float]]]:
+    """Per giorno: volume sessione; per slot HH:MM: lista volumi storici."""
+    try:
+        block = data["chart"]["result"][0]
+        meta = block.get("meta") or {}
+        stamps = block.get("timestamp") or []
+        volumes = ((block.get("indicators") or {}).get("quote") or [{}])[0].get("volume") or []
+    except (TypeError, KeyError, IndexError):
+        return {}, {}
+    day_totals: dict[str, float] = {}
+    slot_hist: dict[str, list[float]] = {}
+    for ts, vol in zip(stamps, volumes):
+        if vol is None:
+            continue
+        if not _bar_in_session(int(ts), meta, session):
+            continue
+        day = _day_key(int(ts), meta)
+        day_totals[day] = day_totals.get(day, 0.0) + float(vol)
+        slot = _slot_key(int(ts), meta)
+        slot_hist.setdefault(slot, []).append(float(vol))
+    return day_totals, slot_hist
+
+
+def build_volume_profile(ticker: str, *, range_: str = "1mo", max_days: int = 20) -> dict[str, Any] | None:
+    data = _chart_json(ticker, interval="5m", range_=range_)
+    if data is None:
+        return None
+    out: dict[str, Any] = {}
+    for session in ("pre", "post", "regular"):
+        day_totals, slot_hist = _collect_session_series(data, session)
+        if not day_totals:
+            continue
+        days = sorted(day_totals.keys())[-max_days:]
+        totals = [day_totals[d] for d in days if day_totals.get(d, 0) > 0]
+        if not totals:
+            continue
+        slots: dict[str, float] = {}
+        for slot, vals in slot_hist.items():
+            if vals:
+                slots[slot] = sum(vals) / len(vals)
+        out[session] = {
+            "session_avg": sum(totals) / len(totals),
+            "slots": slots,
+        }
+    return out or None
+
+
+def fetch_today_session_stats(ticker: str, session: str = "pre") -> tuple[float, list[str]] | None:
+    """Volume sessione odierna + slot HH:MM visti (chart 1d only)."""
+    data = _chart_json(ticker, interval="5m", range_="1d")
+    if data is None:
+        return None
+    try:
+        block = data["chart"]["result"][0]
+        meta = block.get("meta") or {}
+        stamps = block.get("timestamp") or []
+        volumes = ((block.get("indicators") or {}).get("quote") or [{}])[0].get("volume") or []
+    except (TypeError, KeyError, IndexError):
+        return None
+    if not stamps:
+        return None
+    today = _day_key(int(stamps[-1]), meta)
+    total = 0.0
+    slots: list[str] = []
+    for ts, vol in zip(stamps, volumes):
+        if vol is None:
+            continue
+        if _day_key(int(ts), meta) != today:
+            continue
+        if not _bar_in_session(int(ts), meta, session):
+            continue
+        total += float(vol)
+        key = _slot_key(int(ts), meta)
+        if key not in slots:
+            slots.append(key)
+    if total <= 0:
+        return None
+    return total, slots
+
+
 def fetch_rvol(ticker: str, session: str = "pre") -> tuple[float | None, float | None, float | None]:
-    """Ritorna (volume_sessione, media_sessione, rvol)."""
+    """Legacy fallback se baseline assente."""
     data = _chart_json(ticker, interval="5m", range_="5d")
     if data is None:
         return None, None, None

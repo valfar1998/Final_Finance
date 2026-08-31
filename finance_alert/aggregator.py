@@ -29,7 +29,6 @@ def source_status() -> dict[str, bool]:
 
 
 def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
-    """Preferisce provider batch (FMP/Twelve), poi Finnhub/Polygon, Yahoo ultima rete."""
     merged: dict[str, Quote] = {}
     providers = []
     # Batch-first: 1 HTTP per tutta la watchlist
@@ -77,6 +76,9 @@ def overlay_extended_hours(quotes: dict[str, Quote], tickers: list[str]) -> dict
 
 
 def overlay_volume_stats(quotes: dict[str, Quote]) -> dict[str, Quote]:
+    from finance_alert.rvol_baseline import compute_live_rvol, load_baseline
+
+    baseline = load_baseline()
     tickers = list(quotes.keys())
     if not tickers:
         return quotes
@@ -85,7 +87,10 @@ def overlay_volume_stats(quotes: dict[str, Quote]) -> dict[str, Quote]:
         q = quotes[ticker]
         session = (q.session or "regular").lower()
         sess = session if session in {"pre", "post"} else "regular"
-        return ticker, *yahoo.fetch_rvol(ticker, session=sess)
+        vol, avg, rvol = compute_live_rvol(ticker, sess, baseline)
+        if rvol is None:
+            vol, avg, rvol = yahoo.fetch_rvol(ticker, session=sess)
+        return ticker, vol, avg, rvol
 
     for ticker, vol, avg, rvol in map_parallel(_attach, tickers, max_workers=min(6, len(tickers))):
         q = quotes.get(ticker)
@@ -94,6 +99,8 @@ def overlay_volume_stats(quotes: dict[str, Quote]) -> dict[str, Quote]:
         q.volume = vol
         q.avg_volume = avg
         q.rvol = rvol
+        if vol is not None and q.price:
+            q.dollar_volume = float(vol) * float(q.price)
     return quotes
 
 

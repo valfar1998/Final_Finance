@@ -8,7 +8,11 @@ from finance_alert.swing import build_swing_plan
 
 
 def _quote(**kwargs) -> Quote:
-    return Quote(source="test", rvol=3.5, **kwargs)
+    base = dict(source="test", rvol=3.5, dollar_volume=400_000.0, price=100.0)
+    base.update(kwargs)
+    if base.get("dollar_volume") and base.get("price") and base.get("volume") is None:
+        base["volume"] = float(base["dollar_volume"]) / float(base["price"])
+    return Quote(**base)
 
 
 def test_early_mode_keeps_catalysts_drops_late_spike():
@@ -226,6 +230,38 @@ def test_semantic_dedupe_blocks_similar_headline():
     )
     assert headline_similarity(alert.body.split("\n")[0], prior.headline) >= 0.5
     assert is_semantic_duplicate(alert, [prior], threshold=0.55)
+
+
+def test_skips_low_dollar_volume_extended_hours():
+    cfg = load_config()
+    now = datetime(2026, 8, 27, 12, 0, tzinfo=timezone.utc)
+    quotes = {
+        "NVDA": Quote(
+            ticker="NVDA",
+            price=171.5,
+            previous_close=166,
+            change_pct=3.5,
+            source="test",
+            session="pre",
+            rvol=4.0,
+            dollar_volume=50_000,
+        ),
+        "AMD": _quote(ticker="AMD", price=100, previous_close=100.2, change_pct=-0.2, session="pre"),
+        "AVGO": _quote(ticker="AVGO", price=360, previous_close=355, change_pct=1.4, session="pre"),
+        "SMCI": _quote(ticker="SMCI", price=38, previous_close=38, change_pct=0.1, session="pre"),
+    }
+    alerts = build_alerts(cfg=cfg, now=now, quotes=quotes, earnings=[], news=[], filings=[], momentum={})
+    assert all(a.tipo != "extended_hours" for a in alerts)
+
+
+def test_macro_stress_raises_min_setup_score():
+    from finance_alert.macro import effective_min_setup_score
+
+    cfg = load_config()
+    normal = effective_min_setup_score(cfg.rules.macro, {"SPY": -0.5, "QQQ": -0.3})
+    stressed = effective_min_setup_score(cfg.rules.macro, {"SPY": -2.0, "QQQ": -1.8})
+    assert normal == cfg.rules.macro.normal_min_setup_score
+    assert stressed == cfg.rules.macro.stressed_min_setup_score
 
 
 def test_filing_filters_routine_items():

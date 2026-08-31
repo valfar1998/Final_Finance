@@ -8,18 +8,19 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
+from finance_alert.config import LlmRules
 from finance_alert.models import NewsItem
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 PROMPT = """Sei un filtro per alert trading swing (2-7 giorni).
-Analizza headline e publisher. Rispondi SOLO JSON:
-{"approve": true|false, "driver": "breve motivo", "score": 1-10}
+Analizza headline e publisher. Rispondi SOLO JSON valido:
+{"is_catalyst": true|false, "impact_score": 1-10, "driver": "breve motivo"}
 
-Approva SOLO se c'è un driver operativo verificabile che può muovere il titolo:
+is_catalyst=true SOLO con driver operativo verificabile:
 - guidance raised/cut, beat/miss utili, M&A, FDA, contratto materiale, downgrade/upgrade analyst
-Rifiuta: opinioni, promo, "top pick", recap generici, titoli già scontati, rumor vaghi.
+Rifiuta: opinioni, promo, top pick, recap generici, rumor vaghi.
 
 Ticker: {ticker}
 Publisher: {publisher}
@@ -33,6 +34,8 @@ class LlmVerdict:
     score: int = 0
     driver: str = ""
     provider: str = "keyword"
+    verified: bool = True
+    unverified: bool = False
 
 
 def _provider() -> str:
@@ -66,17 +69,26 @@ def _parse_json(text: str) -> dict | None:
         return None
 
 
-def _post_json(url: str, payload: dict, headers: dict[str, str]) -> dict | None:
+def _post_json(url: str, payload: dict, headers: dict[str, str], *, timeout: float) -> dict | None:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=18) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError):
         return None
 
 
-def _call_groq(item: NewsItem) -> LlmVerdict | None:
+def _from_parsed(parsed: dict, provider: str) -> LlmVerdict:
+    approved = bool(parsed.get("is_catalyst", parsed.get("approve")))
+    score = int(parsed.get("impact_score") or parsed.get("score") or 0)
+    driver = str(parsed.get("driver") or "").strip()[:180]
+    if score <= 0:
+        score = 7 if approved else 3
+    return LlmVerdict(approved=approved, score=score, driver=driver, provider=provider, verified=True)
+
+
+def _call_groq(item: NewsItem, timeout: float) -> LlmVerdict | None:
     key = os.getenv("GROQ_API_KEY", "").strip()
     if not key:
         return None
@@ -95,7 +107,12 @@ def _call_groq(item: NewsItem) -> LlmVerdict | None:
             }
         ],
     }
-    raw = _post_json(GROQ_URL, body, {"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    raw = _post_json(
+        GROQ_URL,
+        body,
+        {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        timeout=timeout,
+    )
     if not raw:
         return None
     try:
@@ -105,15 +122,10 @@ def _call_groq(item: NewsItem) -> LlmVerdict | None:
     parsed = _parse_json(str(text))
     if not parsed:
         return None
-    return LlmVerdict(
-        approved=bool(parsed.get("approve")),
-        score=int(parsed.get("score") or 0),
-        driver=str(parsed.get("driver") or "").strip()[:180],
-        provider="groq",
-    )
+    return _from_parsed(parsed, "groq")
 
 
-def _call_gemini(item: NewsItem) -> LlmVerdict | None:
+def _call_gemini(item: NewsItem, timeout: float) -> LlmVerdict | None:
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
         return None
@@ -134,7 +146,7 @@ def _call_gemini(item: NewsItem) -> LlmVerdict | None:
         ],
         "generationConfig": {"temperature": 0, "maxOutputTokens": 120},
     }
-    raw = _post_json(url, body, {"Content-Type": "application/json"})
+    raw = _post_json(url, body, {"Content-Type": "application/json"}, timeout=timeout)
     if not raw:
         return None
     try:
@@ -144,30 +156,37 @@ def _call_gemini(item: NewsItem) -> LlmVerdict | None:
     parsed = _parse_json(str(text))
     if not parsed:
         return None
-    return LlmVerdict(
-        approved=bool(parsed.get("approve")),
-        score=int(parsed.get("score") or 0),
-        driver=str(parsed.get("driver") or "").strip()[:180],
-        provider="gemini",
-    )
+    return _from_parsed(parsed, "gemini")
 
 
-def verify_news_catalyst(item: NewsItem, *, min_score: int = 6) -> LlmVerdict:
+def verify_news_catalyst(item: NewsItem, *, rules: LlmRules | None = None, min_score: int = 6) -> LlmVerdict:
+    llm = rules or LlmRules()
+    min_score = llm.min_llm_score if rules else min_score
+    timeout = llm.timeout_sec
+    fallback_score = llm.fallback_keyword_score
+
     provider = _provider()
     if provider == "off":
         return LlmVerdict(approved=True, score=item.score, driver="keyword-only", provider="keyword")
 
-    verdict = _call_groq(item) if provider == "groq" else _call_gemini(item)
+    verdict = _call_groq(item, timeout) if provider == "groq" else _call_gemini(item, timeout)
     if verdict is None:
-        # LLM down → non bloccare se keyword forte
+        if item.score >= fallback_score:
+            return LlmVerdict(
+                approved=True,
+                score=item.score,
+                driver="keyword-fallback",
+                provider="fallback",
+                verified=False,
+                unverified=True,
+            )
         return LlmVerdict(
-            approved=item.score >= min_score + 1,
+            approved=False,
             score=item.score,
-            driver="llm-unavailable",
+            driver="llm-timeout",
             provider="fallback",
+            verified=False,
         )
-    if verdict.score <= 0:
-        verdict.score = 7 if verdict.approved else 3
     if verdict.approved and verdict.score < min_score:
         verdict.approved = False
     return verdict

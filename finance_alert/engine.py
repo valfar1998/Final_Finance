@@ -24,8 +24,11 @@ from finance_alert.dedupe import (
     save_sent_store,
 )
 from finance_alert.env import ROOT
+from finance_alert.macro import effective_min_setup_score, fetch_index_moves
 from finance_alert.models import Alert
+from finance_alert.rvol_baseline import ensure_baseline
 from finance_alert.rules import build_alerts
+from finance_alert.sources import yahoo
 
 SENT = ROOT / "data" / "telegram_alerts_sent.json"
 LAST = ROOT / "data" / "last_scan.json"
@@ -42,6 +45,8 @@ class ScanResult:
     alerts: list[Alert]
     fresh: list[Alert]
     sources: dict[str, bool]
+    macro_stress: bool = False
+    min_setup_score: int = 6
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -55,6 +60,8 @@ class ScanResult:
             "tipi": [a.tipo for a in self.fresh],
             "tickers": [a.ticker for a in self.fresh],
             "sources": self.sources,
+            "macro_stress": self.macro_stress,
+            "min_setup_score": self.min_setup_score,
         }
 
 
@@ -139,10 +146,32 @@ def write_last_scan(result: ScanResult) -> None:
     LAST.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _macro_quotes(cfg: AppConfig, base: dict) -> dict:
+    etfs = cfg.rules.macro.etfs or []
+    missing = [s for s in etfs if s not in base]
+    if not missing:
+        return base
+    extra = fetch_quotes(missing)
+    ext = yahoo.fetch_session_quotes(missing)
+    for sym, q in ext.items():
+        if sym in extra:
+            extra[sym].session = q.session
+            if q.change_pct is not None:
+                extra[sym].change_pct = q.change_pct
+            if q.price is not None:
+                extra[sym].price = q.price
+        else:
+            extra[sym] = q
+    base.update(extra)
+    return base
+
+
 def run_scan(cfg: AppConfig | None = None) -> ScanResult:
     cfg = cfg or load_config()
     now = _now_utc()
     sources = source_status()
+
+    ensure_baseline(cfg.symbols)
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         f_quotes = pool.submit(fetch_quotes, cfg.symbols)
@@ -155,7 +184,12 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
         filings = f_filings.result()
 
     quotes = overlay_extended_hours(quotes, cfg.symbols)
+    quotes = _macro_quotes(cfg, quotes)
     quotes = overlay_volume_stats(quotes)
+
+    index_moves = fetch_index_moves(cfg.rules.macro.etfs, quotes)
+    min_score = effective_min_setup_score(cfg.rules.macro, index_moves)
+    macro_stress = min_score > cfg.rules.macro.normal_min_setup_score
 
     movers = []
     for ticker, quote in quotes.items():
@@ -177,6 +211,7 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
         news=news,
         filings=filings,
         momentum=momentum,
+        min_setup_score=min_score,
     )
     fresh = filter_fresh(alerts, cfg)
     result = ScanResult(
@@ -189,6 +224,8 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
         alerts=alerts,
         fresh=fresh,
         sources=sources,
+        macro_stress=macro_stress,
+        min_setup_score=min_score,
     )
     write_last_scan(result)
     return result

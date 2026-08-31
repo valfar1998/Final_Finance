@@ -54,7 +54,7 @@ def cmd_scan(*, dry_run: bool) -> int:
     if not result.fresh:
         print("nessun alert nuovo" if result.alerts else "nessun alert")
         return 0
-    text = format_alerts(result.fresh, result.now)
+    text = format_alerts(result.fresh, result.now, macro_stress=result.macro_stress)
     print(text)
     if dry_run:
         return 0

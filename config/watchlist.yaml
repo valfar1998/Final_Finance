@@ -72,12 +72,24 @@ rules:
     enabled: true
     prefilter_score: 4
     min_llm_score: 6
+    timeout_sec: 3
+    fallback_keyword_score: 8
 
   volume:
     min_rvol: 3.0
     require_for_extended: true
     require_for_spike: true
     peer_leader_min_rvol: 2.5
+    min_dollar_volume: 250000
+    min_dollar_volume_high_beta: 500000
+    require_dollar_volume_extended: true
+    require_dollar_volume_peer: true
+
+  macro:
+    enabled: true
+    etfs: [SPY, QQQ]
+    stress_pct: -1.5
+    stressed_min_setup_score: 8
 
   dedupe:
     similarity_threshold: 0.72

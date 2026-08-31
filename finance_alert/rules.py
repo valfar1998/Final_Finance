@@ -47,6 +47,14 @@ def _publisher_key(item: NewsItem) -> str:
     return (item.publisher or item.source or "").strip().lower()
 
 
+def _high_beta_tickers(cfg: AppConfig) -> set[str]:
+    out: set[str] = set()
+    for cluster in cfg.clusters:
+        if cluster.name.lower() == "high_beta":
+            out.update(cluster.tickers)
+    return out
+
+
 def _passes_rvol(quote: Quote, rules: Rules, *, for_spike: bool = False) -> bool:
     vol_rules = rules.volume
     required = vol_rules.require_for_spike if for_spike else vol_rules.require_for_extended
@@ -55,6 +63,25 @@ def _passes_rvol(quote: Quote, rules: Rules, *, for_spike: bool = False) -> bool
     if quote.rvol is None:
         return False
     return quote.rvol >= vol_rules.min_rvol
+
+
+def _passes_dollar_volume(
+    quote: Quote,
+    cfg: AppConfig,
+    rules: Rules,
+    *,
+    for_peer: bool = False,
+) -> bool:
+    vol_rules = rules.volume
+    required = vol_rules.require_dollar_volume_peer if for_peer else vol_rules.require_dollar_volume_extended
+    if not required:
+        return True
+    if quote.dollar_volume is None:
+        return False
+    minimum = vol_rules.min_dollar_volume
+    if quote.ticker.upper() in _high_beta_tickers(cfg):
+        minimum = vol_rules.min_dollar_volume_high_beta
+    return quote.dollar_volume >= minimum
 
 
 def _news_score(item: NewsItem, rules: Rules) -> NewsItem | None:
@@ -89,11 +116,12 @@ def _news_score(item: NewsItem, rules: Rules) -> NewsItem | None:
         return None
 
     if rules.llm.enabled and llm_available():
-        verdict = verify_news_catalyst(item, min_score=rules.llm.min_llm_score)
+        verdict = verify_news_catalyst(item, rules=rules.llm)
         if not verdict.approved:
             return None
         item.llm_driver = verdict.driver
         item.llm_provider = verdict.provider
+        item.llm_unverified = verdict.unverified
         item.score = max(score, verdict.score)
     else:
         if score < rules.news_min_score:
@@ -111,7 +139,9 @@ def _attach_swing(
     pct: float | None = None,
     news_score: int = 0,
     upside: bool = True,
+    min_setup_score: int | None = None,
 ) -> Alert | None:
+    floor = min_setup_score if min_setup_score is not None else cfg.rules.swing.min_setup_score
     quote = quotes.get(alert.ticker.upper()) if alert.ticker != "*" else None
     plan = build_swing_plan(
         tipo=alert.tipo,
@@ -125,14 +155,14 @@ def _attach_swing(
         if alert.tipo == "earnings_soon":
             alert.setup_score = 4
             alert.verdict = "SOLO WATCHLIST"
-            return alert if cfg.rules.swing.min_setup_score <= 4 else None
+            return alert if floor <= 4 else None
         return alert
     alert.setup_score = plan.score
     alert.verdict = plan.verdict
     body = alert.body.rstrip()
     body += "\n\n" + "\n".join(plan.body_lines())
     alert.body = body
-    if plan.score < cfg.rules.swing.min_setup_score:
+    if plan.score < floor:
         return None
     return alert
 
@@ -161,6 +191,7 @@ def build_alerts(
     news: list[NewsItem],
     filings: list[Filing],
     momentum: dict[str, float],
+    min_setup_score: int | None = None,
 ) -> list[Alert]:
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
@@ -168,6 +199,7 @@ def build_alerts(
     alerts: list[Alert] = []
     rules = cfg.rules
     only_up = rules.only_upside
+    score_floor = min_setup_score if min_setup_score is not None else rules.swing.min_setup_score
 
     today_earn = [e for e in earnings if e.date == today.isoformat()]
     if today_earn:
@@ -258,10 +290,17 @@ def build_alerts(
         if session in {"pre", "post"} and abs(pct) >= rules.extended_hours_pct:
             if not _passes_rvol(quote, rules):
                 continue
+            if not _passes_dollar_volume(quote, cfg, rules):
+                continue
             label = "pre-market" if session == "pre" else "after-hours"
             bucket = _bucket(pct, rules.spike_buckets, rules.extended_hours_pct) or rules.extended_hours_pct
             price = f"${quote.price:.2f}" if quote.price is not None else "n.d."
             rvol_txt = f"RVOL {quote.rvol:.1f}x" if quote.rvol is not None else "RVOL n.d."
+            dv_txt = (
+                f"${quote.dollar_volume / 1_000_000:.2f}M"
+                if quote.dollar_volume and quote.dollar_volume >= 1_000_000
+                else f"${quote.dollar_volume:,.0f}" if quote.dollar_volume else "n.d."
+            )
             alerts.append(
                 Alert(
                     key=f"ext|{ticker}|{today.isoformat()}|{session}|up|{int(bucket)}",
@@ -269,8 +308,8 @@ def build_alerts(
                     ticker=ticker,
                     titolo=f"{ticker} — {pct:+.1f}% {label}",
                     body=(
-                        f"{_name(cfg, ticker)} {price} · {rvol_txt}\n"
-                        "Gap fuori seduta con volume anomalo.\n"
+                        f"{_name(cfg, ticker)} {price} · {rvol_txt} · {dv_txt} scambiati\n"
+                        "Gap fuori seduta con volume e liquidità sufficienti.\n"
                         "Valuta ingresso solo se il movimento non è già eccessivo."
                     ),
                     severity="high" if abs(pct) >= 3 else "medium",
@@ -333,9 +372,11 @@ def build_alerts(
         ]
         if not laggards:
             continue
-        lag_txt = ", ".join(f"{t} {_fmt_pct(p)}" for t, p in laggards)
         pick, pick_pct = laggards[0]
+        lag_txt = ", ".join(f"{t} {_fmt_pct(p)}" for t, p in laggards)
         pick_q = quotes.get(pick)
+        if pick_q and not _passes_dollar_volume(pick_q, cfg, rules, for_peer=True):
+            continue
         resist = None
         if rules.peer_resistance and pick_q and pick_q.price:
             resist = nearest_resistance(pick, pick_q.price)
@@ -385,6 +426,9 @@ def build_alerts(
         tags = ", ".join(scored.matched[:6]) if scored.matched else "rilevante"
         pub = scored.publisher or scored.source
         driver = scored.llm_driver or "catalizzatore operativo"
+        alert_tags: list[str] = []
+        if scored.llm_unverified:
+            alert_tags.append("LLM Unverified")
         alerts.append(
             Alert(
                 key=f"news|{scored.ticker}|{ident}",
@@ -398,6 +442,7 @@ def build_alerts(
                 ),
                 severity="high" if scored.score >= 7 else "medium",
                 url=scored.url or None,
+                tags=alert_tags,
             )
         )
 
@@ -451,6 +496,7 @@ def build_alerts(
             pct=pct,
             news_score=news_score,
             upside=True,
+            min_setup_score=score_floor,
         )
         if kept is not None:
             finalized.append(kept)
