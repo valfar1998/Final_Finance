@@ -11,6 +11,8 @@ from finance_alert.sources import benzinga, edgar, finnhub, fmp, marketaux, news
 
 
 def source_status() -> dict[str, bool]:
+    from finance_alert.news_llm import llm_available
+
     return {
         "finnhub": finnhub.available(),
         "fmp": fmp.available(),
@@ -19,6 +21,7 @@ def source_status() -> dict[str, bool]:
         "benzinga": benzinga.available(),
         "newsapi": newsapi.available(),
         "marketaux": marketaux.available(),
+        "news_llm": llm_available(),
         "yahoo_chart": True,
         "sec_edgar": True,
         "yahoo_rss": True,
@@ -70,6 +73,27 @@ def overlay_extended_hours(quotes: dict[str, Quote], tickers: list[str]) -> dict
                 base.previous_close = session_q.previous_close
             base.source = f"{base.source}+yahoo_ext"
             base.ts = session_q.ts or base.ts
+    return quotes
+
+
+def overlay_volume_stats(quotes: dict[str, Quote]) -> dict[str, Quote]:
+    tickers = list(quotes.keys())
+    if not tickers:
+        return quotes
+
+    def _attach(ticker: str) -> tuple[str, float | None, float | None, float | None]:
+        q = quotes[ticker]
+        session = (q.session or "regular").lower()
+        sess = session if session in {"pre", "post"} else "regular"
+        return ticker, *yahoo.fetch_rvol(ticker, session=sess)
+
+    for ticker, vol, avg, rvol in map_parallel(_attach, tickers, max_workers=min(6, len(tickers))):
+        q = quotes.get(ticker)
+        if q is None:
+            continue
+        q.volume = vol
+        q.avg_volume = avg
+        q.rvol = rvol
     return quotes
 
 

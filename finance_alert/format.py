@@ -74,6 +74,8 @@ def format_test_ping(status: dict[str, bool], n_watch: int) -> str:
         "• 8-K e news wire ad alto impatto",
         "",
         "Non garantisce profitto. Filtra setup sotto 6/10.",
+        "News: prefilter keyword + LLM (Groq/Gemini) se configurato.",
+        "Gap/peer: richiede RVOL anomalo.",
         f"Watchlist: {n_watch} ticker",
         f"Fonti ok: {', '.join(ready) or 'nessuna'}",
     ]

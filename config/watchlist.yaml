@@ -1,7 +1,8 @@
 # Modalità SWING: target ~2–3% in ~7 giorni.
-# Invia solo setup ≥ min_setup_score (default 6/10).
+# Miglioramenti precisione: LLM news, RVOL, dedupe semantico, 8-K 2.02/1.01.
 
 watchlist:
+  # Megacap
   - ticker: NVDA
     name: NVIDIA
     cik: "0001045810"
@@ -32,9 +33,26 @@ watchlist:
   - ticker: SMCI
     name: Super Micro
     cik: "0001375365"
+  # Mid-cap alto beta (inefficienza più lunga)
+  - ticker: PLTR
+    name: Palantir
+    cik: "0001321655"
+  - ticker: COIN
+    name: Coinbase
+    cik: "0001679788"
+  - ticker: SOFI
+    name: SoFi
+    cik: "0001818874"
+  - ticker: MARA
+    name: Marathon Digital
+    cik: "0001507605"
+  - ticker: HOOD
+    name: Robinhood
+    cik: "0001783879"
 
 rules:
   only_upside: true
+  peer_resistance: true
   enabled_tipos:
     - earnings_surprise
     - filing_8k
@@ -49,6 +67,21 @@ rules:
     min_setup_score: 6
     chase_pct: 4.0
     pullback_from_close_pct: 0.5
+
+  llm:
+    enabled: true
+    prefilter_score: 4
+    min_llm_score: 6
+
+  volume:
+    min_rvol: 3.0
+    require_for_extended: true
+    require_for_spike: true
+    peer_leader_min_rvol: 2.5
+
+  dedupe:
+    similarity_threshold: 0.72
+    keep_days: 21
 
   extended_hours_pct: 1.5
   peer_lag_leader_pct: 2.5
@@ -121,13 +154,16 @@ rules:
   spike_buckets: [8, 10, 15]
   momentum_pct: 99.0
   momentum_minutes: 30
-  filing_items_only: ["2.02", "1.01", "8.01", "7.01"]
+  # Solo utili (2.02) e accordi materiali (1.01)
+  filing_items_only: ["2.02", "1.01"]
 
 clusters:
   - name: semis
     tickers: [NVDA, AVGO, AMD, SMCI]
   - name: megacap
     tickers: [AAPL, MSFT, GOOGL, AMZN, META]
+  - name: high_beta
+    tickers: [PLTR, COIN, SOFI, MARA, HOOD, TSLA]
 
 edgar:
   enabled: true

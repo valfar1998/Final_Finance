@@ -5,7 +5,9 @@ from datetime import datetime, timedelta, timezone
 
 from finance_alert.config import AppConfig, Rules
 from finance_alert.models import Alert, EarningsEvent, Filing, NewsItem, Quote
+from finance_alert.news_llm import llm_available, verify_news_catalyst
 from finance_alert.swing import build_swing_plan
+from finance_alert.technical import fmt_resistance, nearest_resistance
 
 HOUR_LABEL = {
     "bmo": "prima dell'apertura (BMO)",
@@ -45,6 +47,16 @@ def _publisher_key(item: NewsItem) -> str:
     return (item.publisher or item.source or "").strip().lower()
 
 
+def _passes_rvol(quote: Quote, rules: Rules, *, for_spike: bool = False) -> bool:
+    vol_rules = rules.volume
+    required = vol_rules.require_for_spike if for_spike else vol_rules.require_for_extended
+    if not required:
+        return True
+    if quote.rvol is None:
+        return False
+    return quote.rvol >= vol_rules.min_rvol
+
+
 def _news_score(item: NewsItem, rules: Rules) -> NewsItem | None:
     pub = _publisher_key(item)
     if any(block in pub for block in rules.news_block_publishers):
@@ -73,10 +85,21 @@ def _news_score(item: NewsItem, rules: Rules) -> NewsItem | None:
         score -= 1
     item.score = score
     item.matched = matched
-    if score < rules.news_min_score:
+    if score < rules.llm.prefilter_score and not is_wire:
         return None
-    if len(matched) < 2 and not is_wire:
-        return None
+
+    if rules.llm.enabled and llm_available():
+        verdict = verify_news_catalyst(item, min_score=rules.llm.min_llm_score)
+        if not verdict.approved:
+            return None
+        item.llm_driver = verdict.driver
+        item.llm_provider = verdict.provider
+        item.score = max(score, verdict.score)
+    else:
+        if score < rules.news_min_score:
+            return None
+        if len(matched) < 2 and not is_wire:
+            return None
     return item
 
 
@@ -233,9 +256,12 @@ def build_alerts(
             continue
         session = (quote.session or "regular").lower()
         if session in {"pre", "post"} and abs(pct) >= rules.extended_hours_pct:
+            if not _passes_rvol(quote, rules):
+                continue
             label = "pre-market" if session == "pre" else "after-hours"
             bucket = _bucket(pct, rules.spike_buckets, rules.extended_hours_pct) or rules.extended_hours_pct
             price = f"${quote.price:.2f}" if quote.price is not None else "n.d."
+            rvol_txt = f"RVOL {quote.rvol:.1f}x" if quote.rvol is not None else "RVOL n.d."
             alerts.append(
                 Alert(
                     key=f"ext|{ticker}|{today.isoformat()}|{session}|up|{int(bucket)}",
@@ -243,8 +269,8 @@ def build_alerts(
                     ticker=ticker,
                     titolo=f"{ticker} — {pct:+.1f}% {label}",
                     body=(
-                        f"{_name(cfg, ticker)} {price}\n"
-                        "Gap fuori seduta: spesso anticipa l'open USA.\n"
+                        f"{_name(cfg, ticker)} {price} · {rvol_txt}\n"
+                        "Gap fuori seduta con volume anomalo.\n"
                         "Valuta ingresso solo se il movimento non è già eccessivo."
                     ),
                     severity="high" if abs(pct) >= 3 else "medium",
@@ -253,6 +279,8 @@ def build_alerts(
             continue
         bucket = _bucket(pct, rules.spike_buckets, rules.spike_pct)
         if bucket is None:
+            continue
+        if not _passes_rvol(quote, rules, for_spike=True):
             continue
         price = f"${quote.price:.2f}" if quote.price is not None else "n.d."
         alerts.append(
@@ -291,6 +319,13 @@ def build_alerts(
             leader, lead_pct = max(scored, key=lambda x: abs(x[1]))
             if abs(lead_pct) < rules.peer_lag_leader_pct:
                 continue
+        leader_q = quotes.get(leader)
+        if leader_q is not None:
+            min_rvol = rules.volume.peer_leader_min_rvol
+            if leader_q.rvol is not None and leader_q.rvol < min_rvol:
+                continue
+            if leader_q.rvol is None and rules.volume.require_for_extended:
+                continue
         laggards = [
             (t, p)
             for t, p in scored
@@ -300,6 +335,13 @@ def build_alerts(
             continue
         lag_txt = ", ".join(f"{t} {_fmt_pct(p)}" for t, p in laggards)
         pick, pick_pct = laggards[0]
+        pick_q = quotes.get(pick)
+        resist = None
+        if rules.peer_resistance and pick_q and pick_q.price:
+            resist = nearest_resistance(pick, pick_q.price)
+        rvol_note = ""
+        if leader_q and leader_q.rvol is not None:
+            rvol_note = f" · RVOL leader {leader_q.rvol:.1f}x"
         alerts.append(
             Alert(
                 key=f"peer|{cluster.name}|{leader}|{pick}|{today.isoformat()}",
@@ -307,8 +349,9 @@ def build_alerts(
                 ticker=pick,
                 titolo=f"{pick} — catch-up vs {leader} ({cluster.name})",
                 body=(
-                    f"{leader} {_fmt_pct(lead_pct)} · {pick} {_fmt_pct(pick_pct)} · altri: {lag_txt}\n"
-                    "Idea swing: comprare il peer in ritardo se il settore resta forte."
+                    f"{leader} {_fmt_pct(lead_pct)}{rvol_note} · {pick} {_fmt_pct(pick_pct)} · altri: {lag_txt}\n"
+                    f"Resistenza vicina: {fmt_resistance(resist)}\n"
+                    "Peer in ritardo con leader supportato da volume."
                 ),
                 severity="high",
             )
@@ -341,6 +384,7 @@ def build_alerts(
         ident = _hash(scored.url or scored.headline)
         tags = ", ".join(scored.matched[:6]) if scored.matched else "rilevante"
         pub = scored.publisher or scored.source
+        driver = scored.llm_driver or "catalizzatore operativo"
         alerts.append(
             Alert(
                 key=f"news|{scored.ticker}|{ident}",
@@ -350,7 +394,7 @@ def build_alerts(
                 body=(
                     f"{scored.headline}\n"
                     f"{pub} · tag: {tags}\n"
-                    "Notizia con impatto potenziale sul prezzo entro pochi giorni."
+                    f"Driver: {driver}"
                 ),
                 severity="high" if scored.score >= 7 else "medium",
                 url=scored.url or None,
@@ -369,20 +413,19 @@ def build_alerts(
         items = filing.items.strip() or "voci n.d."
         if item_filter and not any(tok in items.lower() for tok in item_filter):
             continue
+        item_label = "utili" if "2.02" in items else "accordo materiale" if "1.01" in items else items
         alerts.append(
             Alert(
                 key=f"filing|{filing.ticker}|{filing.accession}",
                 tipo="filing_8k",
                 ticker=filing.ticker,
-                titolo=f"{filing.ticker} — {filing.form}",
+                titolo=f"{filing.ticker} — 8-K {item_label}",
                 body=(
-                    f"{_name(cfg, filing.ticker)} ha depositato un {filing.form} "
-                    f"il {filing.filed}.\n"
-                    f"Item: {items}\n"
-                    "Fonte ufficiale SEC: spesso arriva insieme al primo movimento "
-                    "after-hours."
+                    f"{_name(cfg, filing.ticker)} · deposito {filing.filed}\n"
+                    f"Item SEC: {items}\n"
+                    "Filing ufficiale ad alto impatto (utili o accordo materiale)."
                 ),
-                severity="high" if "2.02" in items else "medium",
+                severity="high",
                 url=filing.url,
             )
         )

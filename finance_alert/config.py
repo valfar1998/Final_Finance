@@ -25,6 +25,27 @@ class Ticker:
 
 
 @dataclass
+class LlmRules:
+    enabled: bool = True
+    prefilter_score: int = 4
+    min_llm_score: int = 6
+
+
+@dataclass
+class VolumeRules:
+    min_rvol: float = 3.0
+    require_for_extended: bool = True
+    require_for_spike: bool = True
+    peer_leader_min_rvol: float = 2.5
+
+
+@dataclass
+class DedupeRules:
+    similarity_threshold: float = 0.72
+    keep_days: int = 21
+
+
+@dataclass
 class SwingRules:
     target_pct: float = 2.5
     stop_pct: float = 1.5
@@ -60,6 +81,10 @@ class Rules:
     news_require_wire: bool = False
     news_block_headline: list[str] = field(default_factory=list)
     swing: SwingRules = field(default_factory=SwingRules)
+    llm: LlmRules = field(default_factory=LlmRules)
+    volume: VolumeRules = field(default_factory=VolumeRules)
+    dedupe: DedupeRules = field(default_factory=DedupeRules)
+    peer_resistance: bool = True
 
 
 @dataclass
@@ -111,6 +136,33 @@ def _keywords(raw: Any) -> list[tuple[str, int]]:
         elif isinstance(item, str) and item.strip():
             out.append((item.strip().lower(), 3))
     return out
+
+
+def _llm_rules(raw: Any) -> LlmRules:
+    data = raw if isinstance(raw, dict) else {}
+    return LlmRules(
+        enabled=bool(data.get("enabled", True)),
+        prefilter_score=int(data.get("prefilter_score") or 4),
+        min_llm_score=int(data.get("min_llm_score") or 6),
+    )
+
+
+def _volume_rules(raw: Any) -> VolumeRules:
+    data = raw if isinstance(raw, dict) else {}
+    return VolumeRules(
+        min_rvol=float(data.get("min_rvol") or 3.0),
+        require_for_extended=bool(data.get("require_for_extended", True)),
+        require_for_spike=bool(data.get("require_for_spike", True)),
+        peer_leader_min_rvol=float(data.get("peer_leader_min_rvol") or 2.5),
+    )
+
+
+def _dedupe_rules(raw: Any) -> DedupeRules:
+    data = raw if isinstance(raw, dict) else {}
+    return DedupeRules(
+        similarity_threshold=float(data.get("similarity_threshold") or 0.72),
+        keep_days=int(data.get("keep_days") or 21),
+    )
 
 
 def _swing_rules(raw: Any) -> SwingRules:
@@ -181,6 +233,10 @@ def load_config(path: Path | None = None) -> AppConfig:
         news_require_wire=bool(raw_rules.get("news_require_wire", False)),
         news_block_headline=_str_list(raw_rules.get("news_block_headline")),
         swing=_swing_rules(raw_rules.get("swing")),
+        llm=_llm_rules(raw_rules.get("llm")),
+        volume=_volume_rules(raw_rules.get("volume")),
+        dedupe=_dedupe_rules(raw_rules.get("dedupe")),
+        peer_resistance=bool(raw_rules.get("peer_resistance", True)),
     )
     raw_edgar = data.get("edgar") or {}
     edgar = EdgarConfig(

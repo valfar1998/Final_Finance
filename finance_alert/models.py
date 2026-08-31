@@ -23,6 +23,9 @@ class Quote:
     source: str = ""
     ts: datetime | None = None
     session: str = "regular"
+    volume: float | None = None
+    avg_volume: float | None = None
+    rvol: float | None = None
 
     def pct_from_close(self) -> float | None:
         if self.change_pct is not None:
@@ -68,6 +71,8 @@ class NewsItem:
     publisher: str = ""
     score: int = 0
     matched: list[str] = field(default_factory=list)
+    llm_driver: str = ""
+    llm_provider: str = ""
 
 
 @dataclass

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from finance_alert.aggregator import (
@@ -13,16 +13,22 @@ from finance_alert.aggregator import (
     fetch_news,
     fetch_quotes,
     overlay_extended_hours,
+    overlay_volume_stats,
     source_status,
 )
 from finance_alert.config import AppConfig, load_config
+from finance_alert.dedupe import (
+    is_semantic_duplicate,
+    load_sent_store,
+    record_from_alert,
+    save_sent_store,
+)
 from finance_alert.env import ROOT
 from finance_alert.models import Alert
 from finance_alert.rules import build_alerts
 
 SENT = ROOT / "data" / "telegram_alerts_sent.json"
 LAST = ROOT / "data" / "last_scan.json"
-KEEP_DAYS = 21
 
 
 @dataclass
@@ -57,42 +63,54 @@ def _now_utc() -> datetime:
 
 
 def load_sent() -> dict[str, str]:
+    ids, _records = load_sent_store(_read_sent_raw())
+    return ids
+
+
+def _read_sent_raw() -> dict | list | None:
     if not SENT.is_file():
-        return {}
+        return None
     try:
-        raw = json.loads(SENT.read_text(encoding="utf-8"))
+        return json.loads(SENT.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {}
-    if isinstance(raw, list):
-        return {str(k): _now_utc().isoformat() for k in raw}
-    if isinstance(raw, dict):
-        return {str(k): str(v) for k, v in raw.items()}
-    return {}
+        return None
 
 
-def save_sent(ids: dict[str, str]) -> None:
-    cutoff = _now_utc() - timedelta(days=KEEP_DAYS)
-    kept: dict[str, str] = {}
-    for key, ts in ids.items():
-        try:
-            when = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-        except ValueError:
-            when = _now_utc()
-        if when.tzinfo is None:
-            when = when.replace(tzinfo=timezone.utc)
-        if when >= cutoff:
-            kept[key] = ts
+def save_sent(ids: dict[str, str], records: list | None = None) -> None:
+    cfg = load_config()
+    keep = cfg.rules.dedupe.keep_days
+    _, existing = load_sent_store(_read_sent_raw(), keep_days=keep)
+    merged = {r.key: r for r in existing}
+    if records:
+        for rec in records:
+            merged[rec.key] = rec
+    payload = save_sent_store(ids, list(merged.values()), keep_days=keep)
     SENT.parent.mkdir(parents=True, exist_ok=True)
-    SENT.write_text(json.dumps(kept, indent=2), encoding="utf-8")
+    SENT.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def mark_sent(alerts: list[Alert], sent: dict[str, str] | None = None) -> dict[str, str]:
     ids = sent if sent is not None else load_sent()
-    now = _now_utc().isoformat()
+    now = _now_utc()
+    records = [record_from_alert(a, now) for a in alerts]
     for alert in alerts:
-        ids[alert.key] = now
-    save_sent(ids)
+        ids[alert.key] = now.isoformat()
+    save_sent(ids, records)
     return ids
+
+
+def filter_fresh(alerts: list[Alert], cfg: AppConfig | None = None) -> list[Alert]:
+    cfg = cfg or load_config()
+    ids, records = load_sent_store(_read_sent_raw(), keep_days=cfg.rules.dedupe.keep_days)
+    threshold = cfg.rules.dedupe.similarity_threshold
+    fresh: list[Alert] = []
+    for alert in alerts:
+        if alert.key in ids:
+            continue
+        if is_semantic_duplicate(alert, records, threshold=threshold):
+            continue
+        fresh.append(alert)
+    return fresh
 
 
 def _jsonable(obj: Any) -> Any:
@@ -126,7 +144,6 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
     now = _now_utc()
     sources = source_status()
 
-    # Quote + earnings + news + filings sono indipendenti → in parallelo
     with ThreadPoolExecutor(max_workers=4) as pool:
         f_quotes = pool.submit(fetch_quotes, cfg.symbols)
         f_earn = pool.submit(fetch_earnings, cfg, now)
@@ -138,6 +155,7 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
         filings = f_filings.result()
 
     quotes = overlay_extended_hours(quotes, cfg.symbols)
+    quotes = overlay_volume_stats(quotes)
 
     movers = []
     for ticker, quote in quotes.items():
@@ -160,8 +178,7 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
         filings=filings,
         momentum=momentum,
     )
-    sent = load_sent()
-    fresh = [a for a in alerts if a.key not in sent]
+    fresh = filter_fresh(alerts, cfg)
     result = ScanResult(
         now=now,
         quotes=quotes,

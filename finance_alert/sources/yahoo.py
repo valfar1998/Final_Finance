@@ -189,6 +189,93 @@ def fetch_momentum_pct(ticker: str, minutes: int = 30) -> float | None:
     return (latest - earlier) / earlier * 100.0
 
 
+def _day_key(ts: int, meta: dict) -> str:
+    try:
+        tz = meta.get("exchangeTimezoneName") or "America/New_York"
+        from zoneinfo import ZoneInfo
+
+        when = datetime.fromtimestamp(int(ts), tz=ZoneInfo(str(tz)))
+        return when.date().isoformat()
+    except (TypeError, ValueError, OSError):
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc).date().isoformat()
+
+
+def fetch_rvol(ticker: str, session: str = "pre") -> tuple[float | None, float | None, float | None]:
+    """Ritorna (volume_sessione, media_sessione, rvol)."""
+    data = _chart_json(ticker, interval="5m", range_="5d")
+    if data is None:
+        return None, None, None
+    try:
+        block = data["chart"]["result"][0]
+        meta = block.get("meta") or {}
+        stamps = block.get("timestamp") or []
+        volumes = ((block.get("indicators") or {}).get("quote") or [{}])[0].get("volume") or []
+    except (TypeError, KeyError, IndexError):
+        return None, None, None
+    if not stamps:
+        return None, None, None
+
+    day_session: dict[str, float] = {}
+    for ts, vol in zip(stamps, volumes):
+        if vol is None:
+            continue
+        day = _day_key(int(ts), meta)
+        add = 0.0
+        if session == "pre":
+            periods = meta.get("currentTradingPeriod") or {}
+            pre = periods.get("pre") or {}
+            regular = periods.get("regular") or {}
+            if pre.get("start") is not None and pre.get("end") is not None:
+                if int(pre["start"]) <= int(ts) < int(pre["end"]):
+                    add = float(vol)
+            elif regular.get("start") is not None and int(ts) < int(regular["start"]):
+                add = float(vol)
+        elif session == "post":
+            periods = meta.get("currentTradingPeriod") or {}
+            post = periods.get("post") or {}
+            regular = periods.get("regular") or {}
+            if post.get("start") is not None and post.get("end") is not None:
+                if int(post["start"]) <= int(ts) < int(post["end"]):
+                    add = float(vol)
+            elif regular.get("end") is not None and int(ts) >= int(regular["end"]):
+                add = float(vol)
+        else:
+            periods = meta.get("currentTradingPeriod") or {}
+            regular = periods.get("regular") or {}
+            if regular.get("start") is not None and regular.get("end") is not None:
+                if int(regular["start"]) <= int(ts) < int(regular["end"]):
+                    add = float(vol)
+        if add:
+            day_session[day] = day_session.get(day, 0.0) + add
+
+    if not day_session:
+        return None, None, None
+    days = sorted(day_session.keys())
+    today_vol = day_session.get(days[-1], 0.0)
+    hist = [day_session[d] for d in days[:-1] if day_session[d] > 0]
+    if not hist or today_vol <= 0:
+        return today_vol or None, None, None
+    avg = sum(hist) / len(hist)
+    if avg <= 0:
+        return today_vol, None, None
+    return today_vol, avg, today_vol / avg
+
+
+def fetch_recent_daily_highs(ticker: str, days: int = 20) -> list[float]:
+    data = _chart_json(ticker, interval="1d", range_="1mo")
+    if data is None:
+        return []
+    try:
+        block = data["chart"]["result"][0]
+        highs = ((block.get("indicators") or {}).get("quote") or [{}])[0].get("high") or []
+    except (TypeError, KeyError, IndexError):
+        return []
+    clean = [float(h) for h in highs if h is not None]
+    if len(clean) > days:
+        clean = clean[-days:]
+    return clean
+
+
 def fetch_news(ticker: str) -> list[NewsItem]:
     try:
         xml = get_text(
