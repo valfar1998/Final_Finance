@@ -78,20 +78,37 @@ format (TradingView + fonte SEC/news) → Telegram FINANCE NOTIFY
 | Target swing | **min(P + 1.5×ATR, Resistenza_20g)** (fallback: +2.5%) |
 | Stop swing | **1.0 × ATR(14)** (fallback: −1.5%) |
 
-## Feed wire RSS (gratuiti)
+## Fonti dati (produzione)
 
-Fetch via `get_feed()` con header browser (`Mozilla/5.0 …`), **non** `Python-urllib/3.x`.
+### Wire RSS — `wire_rss.py` + `get_feed()`
 
-| Publisher | Feed | Categoria |
-|-----------|------|-----------|
-| PR Newswire | `/rss/financial-services-latest-news.rss` | Finanza |
-| PR Newswire | `/rss/business-technology-latest-news.rss` | Tech |
-| GlobeNewswire | `RssFeed/orgclass/1/…Public Companies` | Società quotate |
-| GlobeNewswire | `RssFeed/subjectcode/27-Mergers…` | M&A |
+Endpoint stabili, fetch con User-Agent browser (non `Python-urllib/3.x`).
 
-Match automatico su ticker e nome azienda dalla watchlist. Cache in-memory 120s per scan.
+| Fonte | URL | Nel progetto |
+|-------|-----|:---:|
+| **PR Newswire** (generico) | `https://www.prnewswire.com/rss/news-releases-list.rss` | ✅ |
+| **GlobeNewswire** (utili) | `https://www.globenewswire.com/RssFeed/subjectcode/27-Earnings%20Releases/feedTitle/GlobeNewswire%20-%20Earnings%20Releases` | ✅ |
 
-## Watchlist
+Match automatico su ticker/nome watchlist. Cache in-memory 120s per scan.
+
+### SEC EDGAR 8-K — `edgar.py` (API JSON, non RSS Atom)
+
+| Fonte | URL | Nel progetto |
+|-------|-----|:---:|
+| Feed Atom globale SEC | `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&…&output=atom` | ❌ |
+| **API submissions per CIK** | `https://data.sec.gov/submissions/CIK{cik}.json` | ✅ |
+
+L'API per-CIK è preferita: filtra solo ticker in watchlist, include campo `items` (1.01, 2.02, 5.02, 8.01), User-Agent obbligatorio con email (`SEC_CONTACT_EMAIL`).
+
+### Altre fonti (fallback / complementari)
+
+| Fonte | Ruolo |
+|-------|-------|
+| Finnhub (free) | Quote, earnings, news per ticker |
+| Yahoo chart | Pre/post market, RVOL, ATR (fallback Finnhub su 403/parsing) |
+| Groq / Gemini (free) | Filtro catalizzatore news + dedupe LLM |
+
+## Filtri precisione
 
 **Megacap:** NVDA, AAPL, MSFT, GOOGL, AMZN, META, TSLA, AMD, AVGO, SMCI  
 **Mid-cap beta:** PLTR, COIN, SOFI, MARA, HOOD  
@@ -167,6 +184,7 @@ streamlit run app.py
 
 ## Changelog
 
+- **2026-09-01 (d):** Feed produzione stabili: PR `news-releases-list.rss` + GlobeNewswire Earnings; brief fonti dati con mapping SEC API vs Atom.
 - **2026-09-01 (c):** Feed wire RSS PR Newswire/GlobeNewswire (`wire_rss.py`, `get_feed()` con UA browser).
 - **2026-09-01 (b):** Edge cases: cap gap pre-market, target cap resistenza, fallback LLM catalizzatori primari, parsing Yahoo→Finnhub.
 - **2026-09-01 (a):** Upstash Redis; target/stop ATR; 8-K 5.02/8.01; dedupe ibrida; LLM JSON mode.

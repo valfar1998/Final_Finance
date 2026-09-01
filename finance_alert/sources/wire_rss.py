@@ -12,28 +12,17 @@ from finance_alert.config import Ticker
 from finance_alert.http import get_feed
 from finance_alert.models import NewsItem
 
-# Feed pubblici gratuiti (categoria finanza / tech / M&A)
+# Feed pubblici stabili (endpoint aperti, UA browser via get_feed)
 WIRE_FEEDS: list[tuple[str, str, str]] = [
     (
         "PR Newswire",
-        "https://www.prnewswire.com/rss/financial-services-latest-news.rss",
-        "https://www.prnewswire.com/",
-    ),
-    (
-        "PR Newswire",
-        "https://www.prnewswire.com/rss/business-technology-latest-news.rss",
+        "https://www.prnewswire.com/rss/news-releases-list.rss",
         "https://www.prnewswire.com/",
     ),
     (
         "GlobeNewswire",
-        "https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/"
-        "GlobeNewswire%20-%20News%20about%20Public%20Companies",
-        "https://www.globenewswire.com/",
-    ),
-    (
-        "GlobeNewswire",
-        "https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/"
-        "GlobeNewswire%20-%20Mergers%20and%20Acquisitions",
+        "https://www.globenewswire.com/RssFeed/subjectcode/27-Earnings%20Releases/feedTitle/"
+        "GlobeNewswire%20-%20Earnings%20Releases",
         "https://www.globenewswire.com/",
     ),
 ]
