@@ -1,4 +1,4 @@
-from finance_alert.sources import benzinga, edgar, finnhub, fmp, marketaux, newsapi, polygon, twelve, yahoo
+from finance_alert.sources import benzinga, edgar, finnhub, fmp, marketaux, newsapi, polygon, twelve, wire_rss, yahoo
 
 __all__ = [
     "benzinga",
@@ -9,5 +9,6 @@ __all__ = [
     "newsapi",
     "polygon",
     "twelve",
+    "wire_rss",
     "yahoo",
 ]

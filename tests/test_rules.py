@@ -19,7 +19,7 @@ def test_early_mode_keeps_catalysts_drops_late_spike():
     cfg = load_config()
     assert cfg.rules.only_upside is True
     assert cfg.rules.swing.min_setup_score == 6
-    assert cfg.rules.filing_items_only == ["2.02", "1.01"]
+    assert cfg.rules.filing_items_only == ["2.02", "1.01", "5.02", "8.01"]
     now = datetime(2026, 8, 27, 16, 0, tzinfo=timezone.utc)
     quotes = {
         "NVDA": _quote(
@@ -268,8 +268,9 @@ def test_filing_filters_routine_items():
     cfg = load_config()
     now = datetime(2026, 8, 27, 16, 0, tzinfo=timezone.utc)
     filings = [
-        Filing(ticker="NVDA", form="8-K", accession="x1", filed="2026-08-27", items="5.02"),
-        Filing(ticker="NVDA", form="8-K", accession="x2", filed="2026-08-27", items="1.01"),
+        Filing(ticker="NVDA", form="8-K", accession="x1", filed="2026-08-27", items="9.01"),
+        Filing(ticker="NVDA", form="8-K", accession="x2", filed="2026-08-27", items="5.02"),
+        Filing(ticker="NVDA", form="8-K", accession="x3", filed="2026-08-27", items="1.01"),
     ]
     alerts = build_alerts(
         cfg=cfg,
@@ -281,5 +282,8 @@ def test_filing_filters_routine_items():
         momentum={},
     )
     filing_alerts = [a for a in alerts if a.tipo == "filing_8k"]
-    assert len(filing_alerts) == 1
-    assert "1.01" in filing_alerts[0].body
+    assert len(filing_alerts) == 2
+    bodies = " ".join(a.body for a in filing_alerts)
+    assert "5.02" in bodies
+    assert "1.01" in bodies
+    assert "9.01" not in bodies

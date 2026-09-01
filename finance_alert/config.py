@@ -56,8 +56,10 @@ class MacroRules:
 
 @dataclass
 class DedupeRules:
-    similarity_threshold: float = 0.72
+    similarity_threshold: float = 0.65
     keep_days: int = 21
+    time_window_hours: float = 2.0
+    llm_equivalence: bool = True
 
 
 @dataclass
@@ -68,6 +70,10 @@ class SwingRules:
     min_setup_score: int = 6
     chase_pct: float = 4.0
     pullback_from_close_pct: float = 0.5
+    use_atr: bool = True
+    atr_period: int = 14
+    atr_target_mult: float = 1.5
+    atr_stop_mult: float = 1.0
 
 
 @dataclass
@@ -194,8 +200,10 @@ def _macro_rules(raw: Any, swing: SwingRules) -> MacroRules:
 def _dedupe_rules(raw: Any) -> DedupeRules:
     data = raw if isinstance(raw, dict) else {}
     return DedupeRules(
-        similarity_threshold=float(data.get("similarity_threshold") or 0.72),
+        similarity_threshold=float(data.get("similarity_threshold") or 0.65),
         keep_days=int(data.get("keep_days") or 21),
+        time_window_hours=float(data.get("time_window_hours") or 2.0),
+        llm_equivalence=bool(data.get("llm_equivalence", True)),
     )
 
 
@@ -208,6 +216,10 @@ def _swing_rules(raw: Any) -> SwingRules:
         min_setup_score=int(data.get("min_setup_score") or 6),
         chase_pct=float(data.get("chase_pct") or 4.0),
         pullback_from_close_pct=float(data.get("pullback_from_close_pct") or 0.5),
+        use_atr=bool(data.get("use_atr", True)),
+        atr_period=int(data.get("atr_period") or 14),
+        atr_target_mult=float(data.get("atr_target_mult") or 1.5),
+        atr_stop_mult=float(data.get("atr_stop_mult") or 1.0),
     )
 
 

@@ -1,4 +1,4 @@
-"""Livelli tecnici leggeri (resistenza da massimi recenti)."""
+"""Livelli tecnici leggeri (resistenza da massimi recenti, ATR)."""
 
 from __future__ import annotations
 
@@ -17,3 +17,19 @@ def nearest_resistance(ticker: str, price: float | None) -> float | None:
 
 def fmt_resistance(level: float | None) -> str:
     return "n.d." if level is None else f"${level:.2f}"
+
+
+def compute_atr(ticker: str, period: int = 14) -> float | None:
+    """ATR semplice su barre giornaliere Yahoo (fallback se indisponibile)."""
+    ohlc = yahoo.fetch_daily_ohlc(ticker, days=max(period + 5, 25))
+    if len(ohlc) < period + 1:
+        return None
+    trs: list[float] = []
+    for i in range(1, len(ohlc)):
+        high, low, prev_close = ohlc[i][1], ohlc[i][2], ohlc[i - 1][3]
+        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+        trs.append(tr)
+    if len(trs) < period:
+        return None
+    window = trs[-period:]
+    return sum(window) / len(window)

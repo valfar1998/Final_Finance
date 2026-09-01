@@ -7,11 +7,12 @@ from datetime import datetime, timedelta, timezone
 from finance_alert.config import AppConfig
 from finance_alert.http import map_parallel
 from finance_alert.models import EarningsEvent, Filing, NewsItem, Quote
-from finance_alert.sources import benzinga, edgar, finnhub, fmp, marketaux, newsapi, polygon, twelve, yahoo
+from finance_alert.sources import benzinga, edgar, finnhub, fmp, marketaux, newsapi, polygon, twelve, wire_rss, yahoo
 
 
 def source_status() -> dict[str, bool]:
     from finance_alert.news_llm import llm_available
+    from finance_alert.state_store import redis_available
 
     return {
         "finnhub": finnhub.available(),
@@ -22,9 +23,11 @@ def source_status() -> dict[str, bool]:
         "newsapi": newsapi.available(),
         "marketaux": marketaux.available(),
         "news_llm": llm_available(),
+        "upstash_redis": redis_available(),
         "yahoo_chart": True,
         "sec_edgar": True,
         "yahoo_rss": True,
+        "wire_rss": wire_rss.available(),
     }
 
 
@@ -51,12 +54,24 @@ def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
             if ticker not in merged:
                 merged[ticker] = quote
         missing = [t for t in tickers if t not in merged]
+    # Retry Finnhub per ticker persi per errori HTTP/parsing Yahoo
+    missing = [t for t in tickers if t not in merged]
+    if missing and finnhub.available():
+        fb = finnhub.fetch_quotes(missing)
+        for ticker, quote in fb.items():
+            if ticker not in merged:
+                merged[ticker] = quote
     return merged
 
 
 def overlay_extended_hours(quotes: dict[str, Quote], tickers: list[str]) -> dict[str, Quote]:
-    """Sovrascrive prezzo/% in pre/after-hours (Yahoo 5m). Così si anticipa l'open USA."""
+    """Sovrascrive prezzo/% in pre/after-hours (Yahoo 5m). Fallback Finnhub se Yahoo fallisce."""
     ext = yahoo.fetch_session_quotes(tickers)
+    missing = [t for t in tickers if t not in ext]
+    if missing and finnhub.available():
+        fb = finnhub.fetch_quotes(missing)
+        for ticker, session_q in fb.items():
+            ext[ticker] = session_q
     for ticker, session_q in ext.items():
         base = quotes.get(ticker)
         if base is None:
@@ -152,9 +167,9 @@ def fetch_news(cfg: AppConfig, now: datetime) -> list[NewsItem]:
     today = now.date()
     frm = (today - timedelta(days=1)).isoformat()
     to = today.isoformat()
+    items: list[NewsItem] = list(wire_rss.fetch_news(cfg.watchlist))
     jobs = [(ticker, frm, to) for ticker in cfg.symbols]
     batches = map_parallel(_news_for_ticker, jobs, max_workers=min(6, max(1, len(jobs))))
-    items: list[NewsItem] = []
     for batch in batches:
         items.extend(batch)
     cutoff = now.astimezone(timezone.utc) - timedelta(hours=cfg.rules.news_max_age_hours)
@@ -173,7 +188,14 @@ def fetch_momentum(tickers: list[str], minutes: int) -> dict[str, float]:
         return ticker, yahoo.fetch_momentum_pct(ticker, minutes=minutes)
 
     results = map_parallel(_one, tickers, max_workers=min(6, max(1, len(tickers))))
-    return {t: pct for t, pct in results if pct is not None}
+    out = {t: pct for t, pct in results if pct is not None}
+    missing = [t for t in tickers if t not in out]
+    if missing and finnhub.available():
+        fb = finnhub.fetch_quotes(missing)
+        for ticker, quote in fb.items():
+            if quote.change_pct is not None:
+                out[ticker] = float(quote.change_pct)
+    return out
 
 
 def fetch_filings(cfg: AppConfig) -> list[Filing]:

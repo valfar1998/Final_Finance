@@ -1,5 +1,5 @@
-# Modalità SWING: target ~2–3% in ~7 giorni.
-# Miglioramenti precisione: LLM news, RVOL, dedupe semantico, 8-K 2.02/1.01.
+# Modalità SWING: target ATR-based (~1.5× ATR) o fallback % fisso.
+# Miglioramenti precisione: LLM news, RVOL, dedupe ibrido, 8-K 2.02/1.01/5.02/8.01.
 
 watchlist:
   # Megacap
@@ -67,6 +67,10 @@ rules:
     min_setup_score: 6
     chase_pct: 4.0
     pullback_from_close_pct: 0.5
+    use_atr: true
+    atr_period: 14
+    atr_target_mult: 1.5
+    atr_stop_mult: 1.0
 
   llm:
     enabled: true
@@ -92,8 +96,10 @@ rules:
     stressed_min_setup_score: 8
 
   dedupe:
-    similarity_threshold: 0.72
+    similarity_threshold: 0.65
     keep_days: 21
+    time_window_hours: 2
+    llm_equivalence: true
 
   extended_hours_pct: 1.5
   peer_lag_leader_pct: 2.5
@@ -166,8 +172,8 @@ rules:
   spike_buckets: [8, 10, 15]
   momentum_pct: 99.0
   momentum_minutes: 30
-  # Solo utili (2.02) e accordi materiali (1.01)
-  filing_items_only: ["2.02", "1.01"]
+  # Utili (2.02), accordi (1.01), management (5.02), eventi societari (8.01)
+  filing_items_only: ["2.02", "1.01", "5.02", "8.01"]
 
 clusters:
   - name: semis

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import time
+import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 
-from finance_alert.http import DEFAULT_UA, HttpError, get_json, get_text, map_parallel
+from finance_alert.http import DEFAULT_UA, get_feed, HttpError, get_json, get_text, map_parallel
 from finance_alert.models import NewsItem, Quote, parse_num
 
 CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
@@ -31,7 +33,21 @@ def _chart_json(ticker: str, *, interval: str, range_: str) -> Any | None:
             params={"interval": interval, "range": range_, "includePrePost": "true"},
             headers={"User-Agent": DEFAULT_UA, "Referer": "https://finance.yahoo.com/"},
         )
-    except (HttpError, OSError, TimeoutError, ValueError):
+        if not isinstance(data, dict):
+            return None
+        block = data["chart"]["result"][0]
+        if not isinstance(block, dict):
+            return None
+    except (
+        HttpError,
+        OSError,
+        TimeoutError,
+        ValueError,
+        KeyError,
+        TypeError,
+        IndexError,
+        json.JSONDecodeError,
+    ):
         return None
     _chart_cache[key] = (now, data)
     return data
@@ -388,13 +404,36 @@ def fetch_recent_daily_highs(ticker: str, days: int = 20) -> list[float]:
     return clean
 
 
-def fetch_news(ticker: str) -> list[NewsItem]:
+def fetch_daily_ohlc(ticker: str, days: int = 25) -> list[tuple[float, float, float, float]]:
+    """Ritorna [(open, high, low, close), ...] per le ultime `days` barre."""
+    data = _chart_json(ticker, interval="1d", range_="3mo")
+    if data is None:
+        return []
     try:
-        xml = get_text(
-            RSS,
-            params={"s": ticker, "region": "US", "lang": "en-US"},
-            headers={"User-Agent": DEFAULT_UA},
-        )
+        block = data["chart"]["result"][0]
+        quote = ((block.get("indicators") or {}).get("quote") or [{}])[0]
+        opens = quote.get("open") or []
+        highs = quote.get("high") or []
+        lows = quote.get("low") or []
+        closes = quote.get("close") or []
+    except (TypeError, KeyError, IndexError):
+        return []
+    rows: list[tuple[float, float, float, float]] = []
+    for o, h, l, c in zip(opens, highs, lows, closes):
+        if None in (o, h, l, c):
+            continue
+        rows.append((float(o), float(h), float(l), float(c)))
+    if len(rows) > days:
+        rows = rows[-days:]
+    return rows
+
+
+def fetch_news(ticker: str) -> list[NewsItem]:
+    url = f"{RSS}?{urllib.parse.urlencode({'s': ticker, 'region': 'US', 'lang': 'en-US'})}"
+    try:
+        xml = get_feed(url, referer="https://finance.yahoo.com/")
+        if not xml:
+            return []
     except (HttpError, OSError, TimeoutError):
         return []
     try:

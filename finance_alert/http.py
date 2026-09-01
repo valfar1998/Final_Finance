@@ -13,6 +13,12 @@ DEFAULT_UA = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
+FEED_HEADERS = {
+    "User-Agent": DEFAULT_UA,
+    "Accept": "application/rss+xml, application/xml, text/xml, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
 T = TypeVar("T")
 R = TypeVar("R")
 
@@ -103,3 +109,19 @@ def get_text(
     req = urllib.request.Request(url, headers=req_headers, method="GET")
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read().decode("utf-8", errors="replace")
+
+
+def get_feed(
+    url: str,
+    *,
+    referer: str | None = None,
+    timeout: float = 25.0,
+) -> str | None:
+    """Fetch RSS/Atom con User-Agent browser (evita 403 da Python-urllib default)."""
+    headers = dict(FEED_HEADERS)
+    if referer:
+        headers["Referer"] = referer
+    try:
+        return get_text(url, headers=headers, timeout=timeout)
+    except (HttpError, OSError, TimeoutError, urllib.error.URLError):
+        return None

@@ -29,8 +29,8 @@ from finance_alert.models import Alert
 from finance_alert.rvol_baseline import ensure_baseline
 from finance_alert.rules import build_alerts
 from finance_alert.sources import yahoo
+from finance_alert.state_store import load_sent_raw, save_sent_raw
 
-SENT = ROOT / "data" / "telegram_alerts_sent.json"
 LAST = ROOT / "data" / "last_scan.json"
 
 
@@ -70,30 +70,20 @@ def _now_utc() -> datetime:
 
 
 def load_sent() -> dict[str, str]:
-    ids, _records = load_sent_store(_read_sent_raw())
+    ids, _records = load_sent_store(load_sent_raw())
     return ids
-
-
-def _read_sent_raw() -> dict | list | None:
-    if not SENT.is_file():
-        return None
-    try:
-        return json.loads(SENT.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
 
 
 def save_sent(ids: dict[str, str], records: list | None = None) -> None:
     cfg = load_config()
     keep = cfg.rules.dedupe.keep_days
-    _, existing = load_sent_store(_read_sent_raw(), keep_days=keep)
+    _, existing = load_sent_store(load_sent_raw(), keep_days=keep)
     merged = {r.key: r for r in existing}
     if records:
         for rec in records:
             merged[rec.key] = rec
     payload = save_sent_store(ids, list(merged.values()), keep_days=keep)
-    SENT.parent.mkdir(parents=True, exist_ok=True)
-    SENT.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    save_sent_raw(payload)
 
 
 def mark_sent(alerts: list[Alert], sent: dict[str, str] | None = None) -> dict[str, str]:
@@ -108,13 +98,19 @@ def mark_sent(alerts: list[Alert], sent: dict[str, str] | None = None) -> dict[s
 
 def filter_fresh(alerts: list[Alert], cfg: AppConfig | None = None) -> list[Alert]:
     cfg = cfg or load_config()
-    ids, records = load_sent_store(_read_sent_raw(), keep_days=cfg.rules.dedupe.keep_days)
-    threshold = cfg.rules.dedupe.similarity_threshold
+    dedupe = cfg.rules.dedupe
+    ids, records = load_sent_store(load_sent_raw(), keep_days=dedupe.keep_days)
     fresh: list[Alert] = []
     for alert in alerts:
         if alert.key in ids:
             continue
-        if is_semantic_duplicate(alert, records, threshold=threshold):
+        if is_semantic_duplicate(
+            alert,
+            records,
+            threshold=dedupe.similarity_threshold,
+            window_hours=dedupe.time_window_hours,
+            llm_equiv=dedupe.llm_equivalence,
+        ):
             continue
         fresh.append(alert)
     return fresh

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from finance_alert.config import SwingRules
 from finance_alert.models import Quote
+from finance_alert.technical import compute_atr, nearest_resistance
 
 
 @dataclass
@@ -52,8 +53,32 @@ def build_swing_plan(
     prev = float(quote.previous_close or price)
     move = pct if pct is not None else quote.pct_from_close() or 0.0
     horizon = swing.horizon_days
-    target = price * (1 + swing.target_pct / 100.0)
-    stop = price * (1 - swing.stop_pct / 100.0)
+
+    atr = None
+    if swing.use_atr and quote.ticker:
+        atr = compute_atr(quote.ticker, period=swing.atr_period)
+    if atr and atr > 0:
+        atr_upside = swing.atr_target_mult * atr
+        target = price + atr_upside
+        resist = nearest_resistance(quote.ticker, price) if quote.ticker else None
+        if resist is not None:
+            target = min(target, resist)
+            if target <= price:
+                return None
+            if target < price + atr_upside:
+                target_note = (
+                    f"ATR {atr:.2f} → cap resistenza ${resist:.2f} "
+                    f"(target {swing.atr_target_mult:g}×, stop {swing.atr_stop_mult:g}×)"
+                )
+            else:
+                target_note = f"ATR {atr:.2f} → target {swing.atr_target_mult:g}×, stop {swing.atr_stop_mult:g}×"
+        else:
+            target_note = f"ATR {atr:.2f} → target {swing.atr_target_mult:g}×, stop {swing.atr_stop_mult:g}×"
+        stop = price - swing.atr_stop_mult * atr
+    else:
+        target = price * (1 + swing.target_pct / 100.0)
+        stop = price * (1 - swing.stop_pct / 100.0)
+        target_note = f"obiettivo +{swing.target_pct:g}% (non garantito)"
 
     base = {
         "earnings_surprise": 8,
@@ -76,7 +101,7 @@ def build_swing_plan(
         score -= 4
 
     verdict = "INTERESSANTE"
-    note = f"Orizzonte ~{horizon} giorni · obiettivo +{swing.target_pct:g}% (non garantito)."
+    note = f"Orizzonte ~{horizon} giorni · {target_note}."
 
     if abs(move) >= swing.chase_pct:
         entry_lo = prev * (1 + swing.pullback_from_close_pct / 100.0)

@@ -1,4 +1,4 @@
-"""Dedupe semantico su ticker + headline (Jaccard), compatibile col formato sent legacy."""
+"""Dedupe ibrido: stesso ticker + finestra temporale + Jaccard o equivalenza LLM."""
 
 from __future__ import annotations
 
@@ -121,18 +121,32 @@ def is_semantic_duplicate(
     alert: Alert,
     records: list[SentRecord],
     *,
-    threshold: float = 0.72,
+    threshold: float = 0.65,
     same_tipo: bool = True,
+    window_hours: float = 2.0,
+    llm_equiv: bool = True,
+    now: datetime | None = None,
 ) -> bool:
     headline = alert_headline(alert)
     ticker = alert.ticker.upper()
+    ref = now or datetime.now(timezone.utc)
+    cutoff = ref - timedelta(hours=window_hours)
+
     for rec in records:
         if rec.ticker and rec.ticker != ticker:
             continue
+        if rec.ts < cutoff:
+            continue
         if same_tipo and rec.tipo and rec.tipo != alert.tipo:
             continue
-        if headline_similarity(headline, rec.headline) >= threshold:
+        sim = headline_similarity(headline, rec.headline)
+        if sim >= threshold:
             return True
+        if llm_equiv and sim >= 0.25 and rec.headline:
+            from finance_alert.news_llm import headlines_equivalent
+
+            if headlines_equivalent(headline, rec.headline, ticker=ticker):
+                return True
     return False
 
 

@@ -3,11 +3,11 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timedelta, timezone
 
-from finance_alert.config import AppConfig, Rules
+from finance_alert.config import AppConfig, Rules, SwingRules
 from finance_alert.models import Alert, EarningsEvent, Filing, NewsItem, Quote
 from finance_alert.news_llm import llm_available, verify_news_catalyst
 from finance_alert.swing import build_swing_plan
-from finance_alert.technical import fmt_resistance, nearest_resistance
+from finance_alert.technical import compute_atr, fmt_resistance, nearest_resistance
 
 HOUR_LABEL = {
     "bmo": "prima dell'apertura (BMO)",
@@ -82,6 +82,21 @@ def _passes_dollar_volume(
     if quote.ticker.upper() in _high_beta_tickers(cfg):
         minimum = vol_rules.min_dollar_volume_high_beta
     return quote.dollar_volume >= minimum
+
+
+def _gap_exceeds_atr_target(quote: Quote, swing: SwingRules) -> bool:
+    """Scarta se il gap pre/post ha già assorbito l'upside ATR (rischio di comprare i massimi)."""
+    session = (quote.session or "regular").lower()
+    if session not in {"pre", "post"}:
+        return False
+    if quote.price is None or quote.previous_close is None:
+        return False
+    gap = abs(float(quote.price) - float(quote.previous_close))
+    if swing.use_atr:
+        atr = compute_atr(quote.ticker, period=swing.atr_period)
+        if atr and atr > 0:
+            return gap >= swing.atr_target_mult * atr
+    return gap >= float(quote.previous_close) * (swing.target_pct / 100.0)
 
 
 def _news_score(item: NewsItem, rules: Rules) -> NewsItem | None:
@@ -288,6 +303,8 @@ def build_alerts(
             continue
         session = (quote.session or "regular").lower()
         if session in {"pre", "post"} and abs(pct) >= rules.extended_hours_pct:
+            if _gap_exceeds_atr_target(quote, rules.swing):
+                continue
             if not _passes_rvol(quote, rules):
                 continue
             if not _passes_dollar_volume(quote, cfg, rules):
@@ -458,7 +475,16 @@ def build_alerts(
         items = filing.items.strip() or "voci n.d."
         if item_filter and not any(tok in items.lower() for tok in item_filter):
             continue
-        item_label = "utili" if "2.02" in items else "accordo materiale" if "1.01" in items else items
+        if "2.02" in items:
+            item_label = "utili"
+        elif "1.01" in items:
+            item_label = "accordo materiale"
+        elif "5.02" in items:
+            item_label = "cambio management"
+        elif "8.01" in items:
+            item_label = "evento societario"
+        else:
+            item_label = items
         alerts.append(
             Alert(
                 key=f"filing|{filing.ticker}|{filing.accession}",
@@ -468,7 +494,7 @@ def build_alerts(
                 body=(
                     f"{_name(cfg, filing.ticker)} · deposito {filing.filed}\n"
                     f"Item SEC: {items}\n"
-                    "Filing ufficiale ad alto impatto (utili o accordo materiale)."
+                    "Filing ufficiale ad alto impatto (utili, accordo, management o evento societario)."
                 ),
                 severity="high",
                 url=filing.url,
