@@ -26,6 +26,7 @@ from finance_alert.dedupe import (
 from finance_alert.env import ROOT
 from finance_alert.macro import effective_min_setup_score, fetch_index_moves
 from finance_alert.models import Alert
+from finance_alert.performance_tracker import record_sent, update_forwards
 from finance_alert.rvol_baseline import ensure_baseline
 from finance_alert.rules import build_alerts
 from finance_alert.sources import yahoo
@@ -86,13 +87,15 @@ def save_sent(ids: dict[str, str], records: list | None = None) -> None:
     save_sent_raw(payload)
 
 
-def mark_sent(alerts: list[Alert], sent: dict[str, str] | None = None) -> dict[str, str]:
+def mark_sent(alerts: list[Alert], sent: dict[str, str] | None = None, quotes: dict | None = None) -> dict[str, str]:
     ids = sent if sent is not None else load_sent()
     now = _now_utc()
     records = [record_from_alert(a, now) for a in alerts]
     for alert in alerts:
         ids[alert.key] = now.isoformat()
     save_sent(ids, records)
+    if quotes is not None:
+        record_sent(alerts, quotes, sent_at=now)
     return ids
 
 
@@ -168,6 +171,7 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
     sources = source_status()
 
     ensure_baseline(cfg.symbols)
+    update_forwards(now)
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         f_quotes = pool.submit(fetch_quotes, cfg.symbols)

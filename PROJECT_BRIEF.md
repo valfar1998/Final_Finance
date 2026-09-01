@@ -14,147 +14,148 @@ Target e stop sono calcolati con **ATR** (non % fisso) per adattarsi alla volati
 |------------|----------|-------|
 | Runtime | Python 3.11 + PyYAML + urllib | — |
 | Preview | Streamlit (`app.py`) | locale |
-| Scheduler | GitHub Actions (15 min + 3 min volatili) | gratuito |
+| Scheduler primario | **Modal.com** (scan ogni 60s finestre volatili) | $30/mese crediti free |
+| Scheduler backup | GitHub Actions (15 min + 3 min) | gratuito |
 | Dedupe | Upstash Redis REST + fallback file | free tier |
 | Quote / earnings / news | Finnhub | free tier |
 | Wire RSS | PR Newswire + GlobeNewswire | gratuito |
 | LLM news | Groq o Gemini Flash (JSON mode) | free tier |
-| Filing | SEC EDGAR | gratuito |
-
-Fonti a pagamento (FMP, Polygon, Benzinga, …) sono **opzionali** e non necessarie.
+| Filing | SEC EDGAR API + Atom backup | gratuito |
+| Performance | `performance_tracker.py` | locale / Redis |
 
 ## Flusso dati
 
 ```text
 config/watchlist.yaml + .env
         │
-ensure_baseline() → data/rvol_baseline.json (1×/giorno, profilo 20g 5m)
+ensure_baseline() → RVOL con media robusta (trimmed 10% / mediana)
+        │
+performance_tracker.update_forwards() → aggiorna +1/+3/+7g
         │
 aggregator (quote, earnings, news, filings)
-        │  wire RSS (PR Newswire / GlobeNewswire, get_feed + UA browser)
-        │  overlay pre/post (Yahoo 5m → fallback Finnhub)
-        │  momentum (Yahoo → fallback Finnhub)
-        │  RVOL da cache
-        │  macro SPY/QQQ
+        │  wire RSS · overlay pre/post · RVOL · macro SPY/QQQ
+        │  scarta quote halted (LULD / halt)
         │
 rules.build_alerts
-        │  RVOL ≥ 3x + dollar volume gate
-        │  cap gap pre-market vs target ATR
-        │  LLM JSON mode: is_catalyst / impact_score
-        │  min_setup_score 6 (8 se mercato stress)
-        │  swing: target min(1.5×ATR, resistenza 20g), stop 1.0×ATR
+        │  RVOL ≥ 3x · dollar volume · cap gap ATR
+        │  earnings proximity gate (< 72h → blocco)
+        │  LLM JSON · swing ATR + cap resistenza
         │
-dedupe ibrida (ticker + finestra 2h + Jaccard OR LLM)
-        │  stato su Upstash Redis (no cache-miss GH Actions)
+dedupe ibrida → Upstash Redis → Telegram FINANCE NOTIFY
         │
-format (TradingView + fonte SEC/news) → Telegram FINANCE NOTIFY
+performance_tracker.record_sent() → audit trail
 ```
 
 ## Moduli chiave
 
 | Modulo | Ruolo |
 |--------|--------|
-| `http.py` | `get_feed()` con User-Agent browser per RSS/XML (evita 403) |
-| `state_store.py` | Persistenza dedupe su Upstash Redis (REST) o file locale |
-| `sources/wire_rss.py` | Feed RSS gratuiti PR Newswire / GlobeNewswire |
-| `sources/edgar.py` | SEC EDGAR con User-Agent obbligatorio (`Nome/email`) |
-| `rvol_baseline.py` | Cache volume medio 20g; scan usa solo chart **1d** |
-| `macro.py` | SPY/QQQ stress → soglia setup 8/10 |
-| `news_llm.py` | LLM JSON mode; dedupe equivalenza; fallback catalizzatori primari |
-| `dedupe.py` | Dedupe ibrida: ticker + finestra 2h + Jaccard ≥ 0.65 OR LLM |
-| `technical.py` | ATR(14) da OHLC giornaliero; resistenza da massimi 20g |
-| `swing.py` | Entry / target / stop (ATR + cap resistenza) |
+| `stats_util.py` | Media trimmed 10% / mediana per baseline RVOL outlier-resistant |
+| `performance_tracker.py` | Forward-test +1/+3/+7g, win rate, R-R, aspettativa E |
+| `rvol_baseline.py` | Cache volume 20g con baseline robusta |
+| `http.py` | `get_feed()` UA browser per RSS/XML |
+| `state_store.py` | Dedupe Upstash Redis |
+| `sources/wire_rss.py` | PR Newswire + GlobeNewswire Earnings |
+| `sources/edgar.py` | SEC API submissions + Atom 8-K backup |
+| `news_llm.py` | LLM JSON mode + dedupe equivalenza |
+| `dedupe.py` | Dedupe ibrida 2h + Jaccard/LLM |
+| `technical.py` | ATR(14) + resistenza 20g |
+| `swing.py` | Target/stop ATR + cap resistenza |
+| `modal_app.py` | Deploy serverless Modal (60s nelle finestre volatili) |
 
 ## Filtri precisione
 
 | Filtro | Soglia default |
 |--------|----------------|
-| RVOL | ≥ 3× (baseline cache) |
+| RVOL | ≥ 3× su baseline **robusta** (trimmed 10%) |
 | Dollar volume pre/AH | ≥ $250k (megacap), ≥ $500k (high_beta) |
 | 8-K SEC | Item **2.02**, **1.01**, **5.02**, **8.01** |
-| News LLM | `is_catalyst` + `impact_score` ≥ 6; timeout → solo catalizzatori primari a score 6 |
-| Macro stress | SPY o QQQ ≤ −1.5% → setup min **8/10** |
-| Dedupe | Stesso ticker + finestra **2h** + (Jaccard ≥ **0.65** OR equivalenza LLM) |
-| Target swing | **min(P + 1.5×ATR, Resistenza_20g)** (fallback: +2.5%) |
-| Stop swing | **1.0 × ATR(14)** (fallback: −1.5%) |
+| Earnings proximity | Utili entro **72h** → score 0, tag `[RISK: Earnings in < 72h]` |
+| Halt / LULD | `quote.halted = true` → scarta extended_hours, RVOL, peer |
+| News LLM | `is_catalyst` + score ≥ 6; timeout → catalizzatori primari |
+| Macro stress | SPY/QQQ ≤ −1.5% → setup min **8/10** |
+| Dedupe | Ticker + **2h** + (Jaccard ≥ 0.65 OR LLM) |
+| Target swing | **min(P + 1.5×ATR, Resistenza_20g)** |
+| Stop swing | **1.0 × ATR(14)** |
+
+## RVOL baseline robusta
+
+Problema: un giorno di utili straordinari gonfia la media semplice e abbassa il RVOL reale.
+
+Soluzione: `RVOL = V_attuale / robust_avg(V_20g)` dove `robust_avg` usa **media trimmed 10%** (o mediana se < 5 campioni).
+
+## Performance tracker (feedback loop)
+
+File: `data/performance_tracker.json`
+
+Per ogni alert inviato salva entry, target, stop e aggiorna prezzi a **+1**, **+3**, **+7** giorni.
+
+Metriche calcolate:
+- **Win Rate %**
+- **R-Ratio medio**
+- **Aspettativa** \(E = P_{win} \times Target_{medio} - P_{loss} \times Stop_{medio}\)
 
 ## Fonti dati (produzione)
 
-### Wire RSS — `wire_rss.py` + `get_feed()`
+### Wire RSS
 
-Endpoint stabili, fetch con User-Agent browser (non `Python-urllib/3.x`).
+| Fonte | URL |
+|-------|-----|
+| PR Newswire | `https://www.prnewswire.com/rss/news-releases-list.rss` |
+| GlobeNewswire Earnings | `…/subjectcode/27-Earnings%20Releases/…` |
 
-| Fonte | URL | Ruolo |
-|-------|-----|-------|
-| **PR Newswire** | `https://www.prnewswire.com/rss/news-releases-list.rss` | Feed generico stabile (primario) |
-| **GlobeNewswire** | `…/subjectcode/27-Earnings%20Releases/…` | Utili e catalizzatori |
-
-Match automatico su ticker/nome watchlist. Cache in-memory 120s per scan.
-
-### SEC EDGAR 8-K — `edgar.py` (doppia fonte)
-
-| Fonte | URL | Ruolo |
-|-------|-----|-------|
-| **API submissions** (primaria) | `https://data.sec.gov/submissions/CIK{cik}.json` | Item 1.01/2.02/5.02/8.01, per ticker watchlist |
-| **Feed Atom** (backup) | `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&…&output=atom` | 1 richiesta globale; se trova filing nuovo → refresh API per quel ticker |
-
-Strategia: l'API per-CIK resta la fonte autorevole (filtri item). L'Atom è complementare: se segnala un 8-K non ancora in cache API, si ricarica il ticker via submissions. User-Agent SEC obbligatorio (`SEC_CONTACT_EMAIL`).
-
-### Altre fonti (fallback / complementari)
+### SEC EDGAR 8-K
 
 | Fonte | Ruolo |
 |-------|-------|
-| Finnhub (free) | Quote, earnings, news per ticker |
-| Yahoo chart | Pre/post market, RVOL, ATR (fallback Finnhub su 403/parsing) |
-| Groq / Gemini (free) | Filtro catalizzatore news + dedupe LLM |
+| API `submissions/CIK{cik}.json` | Primaria (filtri item) |
+| Atom `browse-edgar?type=8-K&output=atom` | Backup discovery |
 
-## Filtri precisione
+## Watchlist
 
 **Megacap:** NVDA, AAPL, MSFT, GOOGL, AMZN, META, TSLA, AMD, AVGO, SMCI  
 **Mid-cap beta:** PLTR, COIN, SOFI, MARA, HOOD  
 **Cluster:** `semis`, `megacap`, `high_beta`
 
-## Latenza (GitHub Actions)
+## Scheduling: Modal.com (consigliato)
 
-| Finestra | Cron (UTC) | Frequenza |
-|----------|------------|-----------|
-| Lun–ven baseline | `*/15 8-23` | 15 min |
-| Alta vol CET 14:00–15:30 | `*/3 12-13` | 3 min |
-| Alta vol CET 22:00–22:30 | min 0–30 h20 | 3 min |
-| Digest + baseline refresh | `30 11` lun–ven | ~13:30 CET |
-| Sab–dom | ore pari 8–22 | 2 h |
+GitHub Actions ha latenza 5–10 min nella coda. **Modal** offre ~$30/mese di crediti gratuiti.
 
-**Limitazione nota:** i cron GitHub Actions non garantiscono esecuzione al minuto esatto; la coda può ritardare di 5–10 minuti. Per alert tempestivi in pre/after-hours valutare Modal, Lambda + EventBridge o VPS.
+```powershell
+pip install -r requirements-modal.txt
+modal secret create finance-alert TELEGRAM_BOT_TOKEN=... FINNHUB_API_KEY=...
+modal deploy modal_app.py
+```
 
-**Rate limit Yahoo:** fallback trasparente su **Finnhub** se 403/429 o errori di parsing (`KeyError`, `JSONDecodeError`).
+| Job Modal | Cron (UTC) | Frequenza |
+|-----------|------------|-----------|
+| `scan_high_vol_morning` | `*/1 12-13` lun–ven | 60s (~14–15:30 CET) |
+| `scan_high_vol_evening` | `*/1 20` lun–ven | 60s (~22:00 CET) |
+| `scan_baseline` | `*/15 8-23` lun–ven | 15 min |
 
-## Edge cases (logica produzione)
+GitHub Actions resta come **backup** (`telegram-borsa-alerts.yml`).
+
+## Edge cases
 
 | Regola | Comportamento |
 |--------|---------------|
-| **Cap gap pre-market** | Scarta alert `extended_hours` se \|ΔP pre/post\| ≥ target ATR (1.5×ATR) |
-| **Target vs resistenza** | `target = min(P_entry + 1.5×ATR, Resistenza_20g)`; se cap ≤ entry, alert scartato |
-| **Fallback LLM timeout** | `[LLM Unverified]` solo con catalizzatori primari; generiche → score < 6, scartate |
-| **Parsing Yahoo** | Eccezioni JSON attivano fallback Finnhub su quote, session e momentum |
-| **RSS wire 403** | `get_feed()` usa UA browser + `Accept: application/rss+xml` |
-
-## Messaggio Telegram
-
-Ogni alert include:
-- Setup score / verdetto swing
-- Target e stop (ATR o % fallback)
-- **Chart:** `https://www.tradingview.com/chart/?symbol=TICKER`
-- **SEC filing** o **Fonte** (URL originale)
-- Tag `[LLM Unverified]` se LLM in timeout
+| Cap gap pre-market | Scarta se \|ΔP\| ≥ 1.5×ATR |
+| Target vs resistenza | `min(P + 1.5×ATR, Resistenza_20g)` |
+| Fallback LLM | Solo catalizzatori primari a score 6 |
+| Parsing Yahoo | Fallback Finnhub |
+| RSS 403 | UA browser via `get_feed()` |
+| Earnings < 72h | Blocco setup + tag rischio |
+| Halt/LULD | Scarta quote non affidabili |
 
 ## Stato persistente
 
-| Store | Contenuto | Note |
-|-------|-----------|------|
-| **Upstash Redis** | `finance-alert:telegram_alerts_sent` | Primario in CI (no cache-miss) |
-| `data/telegram_alerts_sent.json` | Dedupe + `_meta` headline | Fallback locale / dev |
-| `data/rvol_baseline.json` | Profilo volume 20g per ticker/sessione/slot | Cache Actions in CI |
-| `data/last_scan.json` | Ultimo scan (Streamlit) | Solo locale |
+| Store | Contenuto |
+|-------|-----------|
+| Upstash Redis | Dedupe alert |
+| `data/rvol_baseline.json` | Profilo volume robusto 20g |
+| `data/performance_tracker.json` | Audit trail + forward test |
+| `data/telegram_alerts_sent.json` | Fallback dedupe locale |
+| `data/last_scan.json` | Ultimo scan (Streamlit) |
 
 ## Comandi
 
@@ -163,30 +164,23 @@ python -m finance_alert --status
 python -m finance_alert --dry-run
 python -m finance_alert --test
 streamlit run app.py
+modal deploy modal_app.py
 ```
 
-## Secrets GitHub
+## Secrets
 
 | Secret | Obbligatorio | Ruolo |
 |--------|:---:|-------|
 | `TELEGRAM_BOT_TOKEN` | ✓ | Invio alert |
 | `TELEGRAM_CHAT_ID` | ✓ | Destinatario |
-| `FINNHUB_API_KEY` | ✓ | Quote, earnings, news, fallback Yahoo |
-| `UPSTASH_REDIS_REST_URL` | consigliato | Dedupe persistence-safe |
-| `UPSTASH_REDIS_REST_TOKEN` | consigliato | Dedupe persistence-safe |
-| `GROQ_API_KEY` o `GEMINI_API_KEY` | consigliato | Filtro news + dedupe LLM |
-| `SEC_CONTACT_EMAIL` | consigliato | User-Agent SEC EDGAR |
-
-## Non in scope
-
-- Trading automatico
-- Worker 24/7 continuo (upgrade: Modal / Lambda / VPS)
+| `FINNHUB_API_KEY` | ✓ | Quote, earnings, news |
+| `UPSTASH_REDIS_REST_URL/TOKEN` | consigliato | Dedupe |
+| `GROQ_API_KEY` / `GEMINI_API_KEY` | consigliato | LLM news |
+| `SEC_CONTACT_EMAIL` | consigliato | User-Agent SEC |
 
 ## Changelog
 
-- **2026-09-01 (e):** SEC Atom 8-K come backup complementare all'API submissions; feed wire produzione (PR generico + GlobeNewswire Earnings).
-- **2026-09-01 (d):** Feed produzione stabili: PR `news-releases-list.rss` + GlobeNewswire Earnings; brief fonti dati.
-- **2026-09-01 (b):** Edge cases: cap gap pre-market, target cap resistenza, fallback LLM catalizzatori primari, parsing Yahoo→Finnhub.
-- **2026-09-01 (a):** Upstash Redis; target/stop ATR; 8-K 5.02/8.01; dedupe ibrida; LLM JSON mode.
-- **2026-08-31 (b):** Cache RVOL, dollar volume gate, macro SPY/QQQ, link TradingView/fonte.
-- **2026-08-31 (a):** LLM news, RVOL, dedupe semantico, mid-cap watchlist, cron 3 min.
+- **2026-09-01 (f):** RVOL robusto (trimmed/median); performance_tracker; earnings gate 72h; halt filter; Modal.com deploy.
+- **2026-09-01 (e):** SEC Atom backup; feed wire produzione.
+- **2026-09-01 (a–d):** Upstash, ATR, dedupe ibrida, edge cases, wire RSS.
+- **2026-08-31:** RVOL cache, macro filter, LLM news.

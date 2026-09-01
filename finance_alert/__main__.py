@@ -61,7 +61,7 @@ def cmd_scan(*, dry_run: bool) -> int:
     if not send_message(text):
         print("invio Telegram fallito", file=sys.stderr)
         return 1
-    mark_sent(result.fresh)
+    mark_sent(result.fresh, quotes=result.quotes)
     print(f"alert inviato ({len(result.fresh)} nuovi)")
     return 0
 

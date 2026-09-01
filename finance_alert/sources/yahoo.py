@@ -11,6 +11,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 
 from finance_alert.http import DEFAULT_UA, get_feed, HttpError, get_json, get_text, map_parallel
+from finance_alert.stats_util import robust_average
 from finance_alert.models import NewsItem, Quote, parse_num
 
 CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
@@ -53,6 +54,14 @@ def _chart_json(ticker: str, *, interval: str, range_: str) -> Any | None:
     return data
 
 
+def _is_halted(meta: dict) -> bool:
+    for key in ("marketState", "regularMarketState", "exchangeDataDelayedBy"):
+        raw = str(meta.get(key) or "").upper()
+        if "HALT" in raw or raw in {"SUSPENDED", "LULD"}:
+            return True
+    return False
+
+
 def fetch_quote(ticker: str) -> Quote | None:
     data = _chart_json(ticker, interval="1d", range_="5d")
     if data is None:
@@ -89,6 +98,7 @@ def fetch_quote(ticker: str) -> Quote | None:
         change_pct=pct,
         source="yahoo_chart",
         ts=ts,
+        halted=_is_halted(meta),
     )
 
 
@@ -161,6 +171,7 @@ def fetch_session_quote(ticker: str) -> Quote | None:
         source="yahoo_ext",
         ts=ts,
         session=session,
+        halted=_is_halted(meta),
     )
 
 
@@ -287,9 +298,9 @@ def build_volume_profile(ticker: str, *, range_: str = "1mo", max_days: int = 20
         slots: dict[str, float] = {}
         for slot, vals in slot_hist.items():
             if vals:
-                slots[slot] = sum(vals) / len(vals)
+                slots[slot] = robust_average(vals)
         out[session] = {
-            "session_avg": sum(totals) / len(totals),
+            "session_avg": robust_average(totals),
             "slots": slots,
         }
     return out or None

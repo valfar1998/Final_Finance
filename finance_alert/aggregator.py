@@ -87,6 +87,8 @@ def overlay_extended_hours(quotes: dict[str, Quote], tickers: list[str]) -> dict
                 base.previous_close = session_q.previous_close
             base.source = f"{base.source}+yahoo_ext"
             base.ts = session_q.ts or base.ts
+        if session_q.halted:
+            base.halted = True
     return quotes
 
 
@@ -109,7 +111,7 @@ def overlay_volume_stats(quotes: dict[str, Quote]) -> dict[str, Quote]:
 
     for ticker, vol, avg, rvol in map_parallel(_attach, tickers, max_workers=min(6, len(tickers))):
         q = quotes.get(ticker)
-        if q is None:
+        if q is None or q.halted:
             continue
         q.volume = vol
         q.avg_volume = avg

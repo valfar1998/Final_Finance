@@ -99,6 +99,43 @@ def _gap_exceeds_atr_target(quote: Quote, swing: SwingRules) -> bool:
     return gap >= float(quote.previous_close) * (swing.target_pct / 100.0)
 
 
+_EARNINGS_RISK_TIPOS = {"extended_hours", "news", "peer_lag", "momentum", "price_spike"}
+_EARNINGS_RISK_HOURS = 72
+
+
+def _earnings_within_hours(
+    ticker: str,
+    earnings: list[EarningsEvent],
+    now: datetime,
+    *,
+    hours: int = _EARNINGS_RISK_HOURS,
+) -> bool:
+    horizon = now + timedelta(hours=hours)
+    for ev in earnings:
+        if ev.ticker.upper() != ticker.upper() or ev.reported:
+            continue
+        try:
+            day = datetime.fromisoformat(ev.date).date()
+        except ValueError:
+            continue
+        ev_when = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
+        if now <= ev_when <= horizon:
+            return True
+    return False
+
+
+def _apply_earnings_risk(alert: Alert, earnings: list[EarningsEvent], now: datetime) -> Alert | None:
+    if alert.tipo not in _EARNINGS_RISK_TIPOS or alert.ticker == "*":
+        return alert
+    if not _earnings_within_hours(alert.ticker, earnings, now):
+        return alert
+    if "RISK: Earnings in < 72h" not in alert.tags:
+        alert.tags.append("RISK: Earnings in < 72h")
+    alert.setup_score = 0
+    alert.verdict = "BLOCCATO · utili imminenti"
+    return None
+
+
 def _news_score(item: NewsItem, rules: Rules) -> NewsItem | None:
     pub = _publisher_key(item)
     if any(block in pub for block in rules.news_block_publishers):
@@ -174,6 +211,12 @@ def _attach_swing(
         return alert
     alert.setup_score = plan.score
     alert.verdict = plan.verdict
+    if plan.entry_lo is not None and plan.entry_hi is not None:
+        alert.entry_price = (plan.entry_lo + plan.entry_hi) / 2.0
+    elif quote and quote.price is not None:
+        alert.entry_price = float(quote.price)
+    alert.target_price = plan.target
+    alert.stop_price = plan.stop
     body = alert.body.rstrip()
     body += "\n\n" + "\n".join(plan.body_lines())
     alert.body = body
@@ -296,6 +339,8 @@ def build_alerts(
         )
 
     for ticker, quote in quotes.items():
+        if quote.halted:
+            continue
         pct = quote.pct_from_close()
         if pct is None:
             continue
@@ -392,6 +437,8 @@ def build_alerts(
         pick, pick_pct = laggards[0]
         lag_txt = ", ".join(f"{t} {_fmt_pct(p)}" for t, p in laggards)
         pick_q = quotes.get(pick)
+        if pick_q and pick_q.halted:
+            continue
         if pick_q and not _passes_dollar_volume(pick_q, cfg, rules, for_peer=True):
             continue
         resist = None
@@ -524,6 +571,8 @@ def build_alerts(
             upside=True,
             min_setup_score=score_floor,
         )
+        if kept is not None:
+            kept = _apply_earnings_risk(kept, earnings, now)
         if kept is not None:
             finalized.append(kept)
     alerts = finalized

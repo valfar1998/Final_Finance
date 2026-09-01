@@ -27,6 +27,7 @@ class Quote:
     avg_volume: float | None = None
     rvol: float | None = None
     dollar_volume: float | None = None
+    halted: bool = False
 
     def pct_from_close(self) -> float | None:
         if self.change_pct is not None:
@@ -100,6 +101,9 @@ class Alert:
     setup_score: int = 0
     verdict: str = ""
     tags: list[str] = field(default_factory=list)
+    entry_price: float | None = None
+    target_price: float | None = None
+    stop_price: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
