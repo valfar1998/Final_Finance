@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
+import urllib.error
+import urllib.request
+import xml.etree.ElementTree as ET
 from finance_alert.config import Ticker
 from finance_alert.env import ROOT, env_key
 from finance_alert.http import HttpError, get_json, map_parallel
@@ -10,7 +14,13 @@ from finance_alert.models import Filing
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SUBMISSIONS = "https://data.sec.gov/submissions/CIK{cik}.json"
+ATOM_8K_URL = (
+    "https://www.sec.gov/cgi-bin/browse-edgar"
+    "?action=getcurrent&type=8-K&company=&dateb=&owner=include&count=40&output=atom"
+)
 CACHE = ROOT / "data" / "cik_cache.json"
+_CIK_TITLE_RE = re.compile(r"\((\d{10})\)")
+_ACCESSION_RE = re.compile(r"accession-number=([\d-]+)", re.IGNORECASE)
 
 
 def _ua() -> str:
@@ -23,6 +33,105 @@ def _headers() -> dict[str, str]:
         "User-Agent": _ua(),
         "Accept": "application/json",
     }
+
+
+def _atom_headers() -> dict[str, str]:
+    return {
+        "User-Agent": _ua(),
+        "Accept": "application/atom+xml, application/xml, text/xml, */*",
+    }
+
+
+def _get_atom_xml() -> str | None:
+    req = urllib.request.Request(ATOM_8K_URL, headers=_atom_headers(), method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
+        return None
+
+
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _atom_accession(entry: ET.Element, link: str) -> str:
+    entry_id = entry.findtext("{*}id") or entry.findtext("id") or ""
+    match = _ACCESSION_RE.search(entry_id)
+    if match:
+        return match.group(1)
+    match = _ACCESSION_RE.search(link)
+    if match:
+        return match.group(1)
+    parts = [p for p in link.split("/") if p]
+    for part in reversed(parts):
+        if re.fullmatch(r"\d{10}-\d{2}-\d{6}", part):
+            return part
+    return ""
+
+
+def _parse_atom_filings(
+    xml: str,
+    *,
+    cik_to_ticker: dict[str, str],
+    wanted_forms: set[str],
+) -> list[Filing]:
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError:
+        return []
+    out: list[Filing] = []
+    entries = root.findall(".//{*}entry") or root.findall("./entry")
+    for entry in entries[:40]:
+        title = (entry.findtext("{*}title") or entry.findtext("title") or "").strip()
+        if not title:
+            continue
+        form = title.split(" - ", 1)[0].strip().upper()
+        if form not in wanted_forms:
+            continue
+        cik_match = _CIK_TITLE_RE.search(title)
+        if not cik_match:
+            continue
+        cik = cik_match.group(1)
+        ticker = cik_to_ticker.get(cik)
+        if not ticker:
+            continue
+        link = ""
+        for node in entry.findall("{*}link") + entry.findall("link"):
+            href = (node.attrib.get("href") or "").strip()
+            if href:
+                link = href
+                break
+        if not link:
+            continue
+        accession = _atom_accession(entry, link)
+        if not accession:
+            continue
+        updated = (entry.findtext("{*}updated") or entry.findtext("updated") or "")[:10]
+        out.append(
+            Filing(
+                ticker=ticker,
+                form=form,
+                accession=accession,
+                filed=updated,
+                items="",
+                url=link,
+            )
+        )
+    return out
+
+
+def _atom_filings_for_watchlist(
+    tickers: list[Ticker],
+    forms: list[str],
+) -> list[Filing]:
+    xml = _get_atom_xml()
+    if not xml:
+        return []
+    cik_map = resolve_cik(tickers)
+    cik_to_ticker = {cik: ticker for ticker, cik in cik_map.items()}
+    wanted = {f.upper() for f in forms}
+    return _parse_atom_filings(xml, cik_to_ticker=cik_to_ticker, wanted_forms=wanted)
 
 
 def _load_cik_cache() -> dict[str, str]:
@@ -110,16 +219,30 @@ def fetch_filings(tickers: list[Ticker], forms: list[str], limit: int = 8) -> li
     cik_map = resolve_cik(tickers)
     wanted = {f.upper() for f in forms}
     jobs = [(item, cik_map[item.ticker]) for item in tickers if item.ticker in cik_map]
-    if not jobs:
-        return []
-
-    def _one(pair: tuple[Ticker, str]) -> list[Filing]:
-        item, cik = pair
-        return _filings_for_ticker(item, cik, wanted, limit)
-
-    # SEC tollera ~10 req/s; pochi worker evitano 429
-    batches = map_parallel(_one, jobs, max_workers=min(4, len(jobs)))
     out: list[Filing] = []
-    for batch in batches:
-        out.extend(batch)
+    if jobs:
+
+        def _one(pair: tuple[Ticker, str]) -> list[Filing]:
+            item, cik = pair
+            return _filings_for_ticker(item, cik, wanted, limit)
+
+        batches = map_parallel(_one, jobs, max_workers=min(4, len(jobs)))
+        for batch in batches:
+            out.extend(batch)
+
+    # Backup: feed Atom SEC (1 richiesta) per filing non presenti nell'API submissions
+    known = {f.accession for f in out if f.accession}
+    atom_rows = _atom_filings_for_watchlist(tickers, forms)
+    refresh: set[str] = set()
+    for row in atom_rows:
+        if row.accession in known:
+            continue
+        refresh.add(row.ticker)
+    if refresh:
+        extra_jobs = [(item, cik_map[item.ticker]) for item in tickers if item.ticker in refresh]
+        for item, cik in extra_jobs:
+            for filing in _filings_for_ticker(item, cik, wanted, limit):
+                if filing.accession not in known:
+                    out.append(filing)
+                    known.add(filing.accession)
     return out

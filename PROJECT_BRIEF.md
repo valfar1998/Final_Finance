@@ -84,21 +84,21 @@ format (TradingView + fonte SEC/news) → Telegram FINANCE NOTIFY
 
 Endpoint stabili, fetch con User-Agent browser (non `Python-urllib/3.x`).
 
-| Fonte | URL | Nel progetto |
-|-------|-----|:---:|
-| **PR Newswire** (generico) | `https://www.prnewswire.com/rss/news-releases-list.rss` | ✅ |
-| **GlobeNewswire** (utili) | `https://www.globenewswire.com/RssFeed/subjectcode/27-Earnings%20Releases/feedTitle/GlobeNewswire%20-%20Earnings%20Releases` | ✅ |
+| Fonte | URL | Ruolo |
+|-------|-----|-------|
+| **PR Newswire** | `https://www.prnewswire.com/rss/news-releases-list.rss` | Feed generico stabile (primario) |
+| **GlobeNewswire** | `…/subjectcode/27-Earnings%20Releases/…` | Utili e catalizzatori |
 
 Match automatico su ticker/nome watchlist. Cache in-memory 120s per scan.
 
-### SEC EDGAR 8-K — `edgar.py` (API JSON, non RSS Atom)
+### SEC EDGAR 8-K — `edgar.py` (doppia fonte)
 
-| Fonte | URL | Nel progetto |
-|-------|-----|:---:|
-| Feed Atom globale SEC | `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&…&output=atom` | ❌ |
-| **API submissions per CIK** | `https://data.sec.gov/submissions/CIK{cik}.json` | ✅ |
+| Fonte | URL | Ruolo |
+|-------|-----|-------|
+| **API submissions** (primaria) | `https://data.sec.gov/submissions/CIK{cik}.json` | Item 1.01/2.02/5.02/8.01, per ticker watchlist |
+| **Feed Atom** (backup) | `https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&…&output=atom` | 1 richiesta globale; se trova filing nuovo → refresh API per quel ticker |
 
-L'API per-CIK è preferita: filtra solo ticker in watchlist, include campo `items` (1.01, 2.02, 5.02, 8.01), User-Agent obbligatorio con email (`SEC_CONTACT_EMAIL`).
+Strategia: l'API per-CIK resta la fonte autorevole (filtri item). L'Atom è complementare: se segnala un 8-K non ancora in cache API, si ricarica il ticker via submissions. User-Agent SEC obbligatorio (`SEC_CONTACT_EMAIL`).
 
 ### Altre fonti (fallback / complementari)
 
@@ -184,8 +184,8 @@ streamlit run app.py
 
 ## Changelog
 
-- **2026-09-01 (d):** Feed produzione stabili: PR `news-releases-list.rss` + GlobeNewswire Earnings; brief fonti dati con mapping SEC API vs Atom.
-- **2026-09-01 (c):** Feed wire RSS PR Newswire/GlobeNewswire (`wire_rss.py`, `get_feed()` con UA browser).
+- **2026-09-01 (e):** SEC Atom 8-K come backup complementare all'API submissions; feed wire produzione (PR generico + GlobeNewswire Earnings).
+- **2026-09-01 (d):** Feed produzione stabili: PR `news-releases-list.rss` + GlobeNewswire Earnings; brief fonti dati.
 - **2026-09-01 (b):** Edge cases: cap gap pre-market, target cap resistenza, fallback LLM catalizzatori primari, parsing Yahoo→Finnhub.
 - **2026-09-01 (a):** Upstash Redis; target/stop ATR; 8-K 5.02/8.01; dedupe ibrida; LLM JSON mode.
 - **2026-08-31 (b):** Cache RVOL, dollar volume gate, macro SPY/QQQ, link TradingView/fonte.
