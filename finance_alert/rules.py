@@ -124,7 +124,15 @@ def _earnings_within_hours(
     return False
 
 
-def _apply_earnings_risk(alert: Alert, earnings: list[EarningsEvent], now: datetime) -> Alert | None:
+def _apply_earnings_risk(
+    alert: Alert,
+    earnings: list[EarningsEvent],
+    now: datetime,
+    *,
+    enabled: bool = True,
+) -> Alert | None:
+    if not enabled:
+        return alert
     if alert.tipo not in _EARNINGS_RISK_TIPOS or alert.ticker == "*":
         return alert
     if not _earnings_within_hours(alert.ticker, earnings, now):
@@ -572,7 +580,7 @@ def build_alerts(
             min_setup_score=score_floor,
         )
         if kept is not None:
-            kept = _apply_earnings_risk(kept, earnings, now)
+            kept = _apply_earnings_risk(kept, earnings, now, enabled=rules.earnings_gate_enabled)
         if kept is not None:
             finalized.append(kept)
     alerts = finalized

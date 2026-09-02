@@ -10,6 +10,7 @@ from finance_alert.engine import mark_sent, run_scan
 from finance_alert.env import load_env
 from finance_alert.format import format_alerts, format_test_ping
 from finance_alert.telegram import load_credentials, send_message
+from finance_alert.unified_cli import cmd_analyze, cmd_regulatory, cmd_screen
 
 
 def _print(obj) -> None:
@@ -77,7 +78,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="calcola senza inviare")
     parser.add_argument("--test", action="store_true", help="ping di prova sul bot")
     parser.add_argument("--status", action="store_true", help="mostra fonti e watchlist")
+    parser.add_argument("--analyze", metavar="TICKER", help="analisi unificata score + buy target")
+    parser.add_argument("--regulatory", metavar="TICKER", help="check regolatori (FCA/AMF/ESMA/...)")
+    parser.add_argument("--screen", action="store_true", help="screen watchlist + screener_tickers")
+    parser.add_argument(
+        "--update-watchlist",
+        action="store_true",
+        help="con --screen, aggiorna watchlist dinamica SQLite",
+    )
     args = parser.parse_args(argv)
+    if args.analyze:
+        return cmd_analyze(args.analyze)
+    if args.regulatory:
+        return cmd_regulatory(args.regulatory)
+    if args.screen:
+        return cmd_screen(update_watchlist=args.update_watchlist)
     if args.status:
         return cmd_status()
     if args.test:

@@ -23,6 +23,7 @@ from finance_alert.dedupe import (
     record_from_alert,
     save_sent_store,
 )
+from finance_alert.enrich import filter_alerts
 from finance_alert.env import ROOT
 from finance_alert.macro import effective_min_setup_score, fetch_index_moves
 from finance_alert.models import Alert
@@ -214,6 +215,7 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
         min_setup_score=min_score,
     )
     fresh = filter_fresh(alerts, cfg)
+    fresh = filter_alerts(fresh)
     result = ScanResult(
         now=now,
         quotes=quotes,

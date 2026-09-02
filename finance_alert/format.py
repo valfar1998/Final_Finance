@@ -4,6 +4,13 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from finance_alert.models import Alert
+from finance_alert.unified_config import load_unified_config
+
+try:
+    from finance_alert.enrich import build_context_block, enrich_alert
+except ImportError:  # pragma: no cover
+    enrich_alert = None  # type: ignore
+    build_context_block = None  # type: ignore
 
 TZ = ZoneInfo("Europe/Rome")
 BRAND = "FINANCE NOTIFY"
@@ -48,14 +55,25 @@ def _quick_links(alert: Alert) -> list[str]:
     return lines
 
 
-def format_alerts(alerts: list[Alert], now: datetime | None = None, *, macro_stress: bool = False) -> str:
+def format_alerts(
+    alerts: list[Alert],
+    now: datetime | None = None,
+    *,
+    macro_stress: bool = False,
+    with_unified: bool | None = None,
+) -> str:
     when = (now or datetime.now(timezone.utc)).astimezone(TZ)
+    unified_on = with_unified
+    if unified_on is None:
+        unified_on = load_unified_config().rules.enrich_telegram
     lines = [
         f"{BRAND} — swing 2–3% / ~7 giorni",
         f"{when.strftime('%Y-%m-%d %H:%M')} Roma",
         "",
         "Piano indicativo (non consiglio finanziario).",
     ]
+    if unified_on:
+        lines.append("📊 Quant Platform: score fondamentale + quant + regolatori.")
     if macro_stress:
         lines.append("Mercato debole (SPY/QQQ): soglia setup alzata a 8/10.")
     lines.append("")
@@ -73,6 +91,14 @@ def format_alerts(alerts: list[Alert], now: datetime | None = None, *, macro_str
             tag_bit = f" {' '.join(tag_bits)}" if tag_bits else ""
             lines.append(f"{alert.titolo}{score_bit}{verdict_bit}{tag_bit}")
             lines.append(alert.body)
+            if unified_on and enrich_alert and build_context_block and alert.ticker not in ("*", ""):
+                try:
+                    ctx = enrich_alert(alert)
+                    if ctx:
+                        lines.append("")
+                        lines.extend(build_context_block(ctx).splitlines())
+                except Exception:
+                    pass
             lines.extend(_quick_links(alert))
             lines.append("")
     text = "\n".join(lines).strip()

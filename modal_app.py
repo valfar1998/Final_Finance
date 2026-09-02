@@ -12,6 +12,7 @@ if modal is not None:
 
     image = (
         modal.Image.debian_slim(python_version="3.11")
+        .apt_install("tzdata")
         .pip_install("PyYAML>=6.0")
         .add_local_dir("finance_alert", remote_path="/root/finance_alert")
         .add_local_dir("config", remote_path="/root/config")
@@ -60,4 +61,7 @@ def _run_notify() -> None:
 
     from finance_alert.__main__ import main
 
-    raise SystemExit(main([]))
+    # Non usare SystemExit: Modal lo tratta come eccezione anche con code 0.
+    code = main([])
+    if code:
+        raise RuntimeError(f"scan failed with exit code {code}")

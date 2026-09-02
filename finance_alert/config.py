@@ -107,6 +107,7 @@ class Rules:
     dedupe: DedupeRules = field(default_factory=DedupeRules)
     peer_resistance: bool = True
     macro: MacroRules = field(default_factory=MacroRules)
+    earnings_gate_enabled: bool = True
 
 
 @dataclass
@@ -285,6 +286,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         dedupe=_dedupe_rules(raw_rules.get("dedupe")),
         peer_resistance=bool(raw_rules.get("peer_resistance", True)),
         macro=_macro_rules(raw_rules.get("macro"), swing),
+        earnings_gate_enabled=bool(raw_rules.get("earnings_gate_enabled", True)),
     )
     raw_edgar = data.get("edgar") or {}
     edgar = EdgarConfig(

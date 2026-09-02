@@ -1,125 +1,222 @@
-# PROJECT BRIEF — Finance Alert (FINANCE NOTIFY)
+# PROJECT BRIEF — Final Finance (Quant Platform Unificata)
 
-## Visione
+> **Repository:** [valfar1998/Final_Finance](https://github.com/valfar1998/Final_Finance)  
+> **Scopo:** ecosistema quantamentale gratuito che unisce alert Telegram intraday, scoring fondamentale, analisi quantitativa e controlli regolatori internazionali.  
+> **Disclaimer:** tutti gli output (score, target, alert) sono strumenti informativi — **non consiglio finanziario**.
 
-Alert **Telegram** su eventi di borsa **verificabili** per swing trading (~7 giorni): utili/surprise, gap pre/after-hours con volume e liquidità, peer in ritardo, 8-K SEC ad alto impatto, news wire filtrate da **LLM**.
+---
 
-Target e stop sono calcolati con **ATR** (non % fisso) per adattarsi alla volatilità di titoli high-beta come MARA, COIN, TSLA.
+## 1. Visione e problema risolto
 
-> Non è consiglio finanziario. Obiettivo: catalizzatori verificabili con meno rumore e link rapidi per agire.
+Il trading/investing informata richiede tre informazioni che di solito vivono in tool separati:
 
-## Stack (solo tier gratuiti)
+| Domanda | Modulo | Output |
+|---------|--------|--------|
+| **Quando** entrare? (catalizzatore, volume, gap) | FINANCE NOTIFY | Alert Telegram swing ~7 giorni |
+| **Cosa** comprare? (qualità fondamentale) | Stock Analysis | Score 0–100 + verdetto + buy target |
+| **Quanto** può rendere/volare? (prezzo storico, MC) | Finance Analyzer | CAGR, vol, Monte Carlo, buyability % |
+| **È** regolato/sanzionato? | Regulatory Hub | Flag FCA/SEC/ESMA/AMF/… |
 
-| Componente | Servizio | Piano |
-|------------|----------|-------|
-| Runtime | Python 3.11 + PyYAML + urllib | — |
-| Preview | Streamlit (`app.py`) | locale |
-| Scheduler primario | **Modal.com** (scan ogni 60s finestre volatili) | $30/mese crediti free |
-| Scheduler backup | GitHub Actions (15 min + 3 min) | gratuito |
-| Dedupe | Upstash Redis REST + fallback file | free tier |
-| Quote / earnings / news | Finnhub | free tier |
-| Wire RSS | PR Newswire + GlobeNewswire | gratuito |
-| LLM news | Groq o Gemini Flash (JSON mode) | free tier |
-| Filing | SEC EDGAR API + Atom backup | gratuito |
-| Performance | `performance_tracker.py` | locale / Redis |
+**Final Finance** risponde alle quattro domande in un'unica pipeline e arricchisce ogni alert Telegram con score unificato e prezzo di acquisto consigliato.
 
-## Flusso dati
+---
+
+## 2. Struttura repository
 
 ```text
-config/watchlist.yaml + .env
-        │
-ensure_baseline() → RVOL con media robusta (trimmed 10% / mediana)
-        │
-performance_tracker.update_forwards() → aggiorna +1/+3/+7g
-        │
-aggregator (quote, earnings, news, filings)
-        │  wire RSS · overlay pre/post · RVOL · macro SPY/QQQ
-        │  scarta quote halted (LULD / halt)
-        │
-rules.build_alerts
-        │  RVOL ≥ 3x · dollar volume · cap gap ATR
-        │  earnings proximity gate (< 72h → blocco)
-        │  LLM JSON · swing ATR + cap resistenza
-        │
-dedupe ibrida → Upstash Redis → Telegram FINANCE NOTIFY
-        │
-performance_tracker.record_sent() → audit trail
+Final_Finance/
+├── PROJECT_BRIEF.md              ← questo documento
+├── README.md                     ← quick start
+├── .env.example                  ← secrets FINANCE NOTIFY
+├── requirements.txt              ← Python core (notify + unified)
+├── requirements-modal.txt        ← deploy Modal.com
+├── modal_app.py                  ← scheduler serverless primario
+├── app.py                        ← Streamlit dashboard alert
+│
+├── config/
+│   ├── watchlist.yaml            ← ticker monitorati + regole filtri
+│   └── unified.yaml              ← score unificato, quality gate, screener
+│
+├── finance_alert/                ← MODULO 1: FINANCE NOTIFY + Quant Platform core
+│   ├── __main__.py               ← CLI (--dry-run, --analyze, --screen, …)
+│   ├── engine.py                 ← orchestratore scan
+│   ├── aggregator.py             ← fetch quote/earnings/news/filings
+│   ├── rules.py                  ← filtri precisione + swing plan
+│   ├── format.py                 ← messaggi Telegram (arricchiti unified)
+│   ├── enrich.py                 ← collegamento alert → analisi unificata
+│   ├── telegram.py               ← invio bot Telegram
+│   ├── analysis/                 ← scoring unificato
+│   │   ├── fundamental.py        → bridge stock_analysis
+│   │   ├── quantitative.py       → bridge finance_analyzer
+│   │   ├── unified.py            → formula score 0–10
+│   │   └── bridge.py
+│   ├── regulatory/               ← API governative
+│   │   ├── hub.py                ← router per regione ticker
+│   │   ├── fca.py, fsa_edinet.py, amf.py, esma.py, bafin.py, consob.py
+│   ├── db/store.py               ← SQLite quant_platform.db
+│   └── sources/                  ← Finnhub, EDGAR, wire RSS, Yahoo, …
+│
+├── stock_analysis/               ← MODULO 2: scoring fondamentale
+│   ├── scoring_engine.py         ← motore 0–100 per settore
+│   ├── yahoo_api.py              ← fetch yfinance
+│   ├── smart_money.py            ← bonus 13F Dataroma
+│   ├── auto_analyze.py           ← CLI/API senza HTML
+│   ├── portfolio_db.py           ← SQLite portafoglio
+│   ├── telegram_notify.py        ← alert variazione score
+│   └── app.py                    ← Flask UI :5055
+│
+├── finance_analyzer/             ← MODULO 3: dashboard quantitativa
+│   ├── backend/                  ← FastAPI :8000
+│   │   ├── main.py
+│   │   ├── services/             ← analytics, forecast, market_data, portfolio
+│   │   └── scripts/scan_portfolio_alerts.py
+│   └── frontend/                 ← Next.js :3000
+│
+├── data/                         ← stato locale (gitignored parziale)
+│   ├── quant_platform.db
+│   ├── rvol_baseline.json
+│   └── performance_tracker.json
+│
+└── .github/workflows/            ← GitHub Actions backup scheduler
+    ├── telegram-borsa-alerts.yml
+    └── keepalive.yml
 ```
 
-## Moduli chiave
+---
 
-| Modulo | Ruolo |
-|--------|--------|
-| `stats_util.py` | Media trimmed 10% / mediana per baseline RVOL outlier-resistant |
-| `performance_tracker.py` | Forward-test +1/+3/+7g, win rate, R-R, aspettativa E |
-| `rvol_baseline.py` | Cache volume 20g con baseline robusta |
-| `http.py` | `get_feed()` UA browser per RSS/XML |
-| `state_store.py` | Dedupe Upstash Redis |
-| `sources/wire_rss.py` | PR Newswire + GlobeNewswire Earnings |
-| `sources/edgar.py` | SEC API submissions + Atom 8-K backup |
-| `news_llm.py` | LLM JSON mode + dedupe equivalenza |
-| `dedupe.py` | Dedupe ibrida 2h + Jaccard/LLM |
-| `technical.py` | ATR(14) + resistenza 20g |
-| `swing.py` | Target/stop ATR + cap resistenza |
-| `modal_app.py` | Deploy serverless Modal (60s nelle finestre volatili) |
+## 3. Architettura end-to-end
 
-## Filtri precisione
+```text
+                         ┌─────────────────────────────────────┐
+                         │  config/watchlist.yaml              │
+                         │  config/unified.yaml                │
+                         │  .env (TELEGRAM, FINNHUB, FCA, …)   │
+                         └──────────────┬──────────────────────┘
+                                        │
+    ┌───────────────────────────────────┼───────────────────────────────────┐
+    │                    FINANCE NOTIFY (scheduler)                         │
+    │  Modal.com 60s  │  GitHub Actions 15m  │  python -m finance_alert    │
+    └───────────────────────────────────┬───────────────────────────────────┘
+                                        │
+                    engine.run_scan()
+                         │
+         ┌──────────────────────────────┼──────────────────────────────┐
+         │                              │                              │
+         ▼                              ▼                              ▼
+   fetch_quotes                  fetch_earnings                  fetch_news
+   (Finnhub/Yahoo)               (Finnhub/FMP)                   (Finnhub + wire RSS)
+         │                              │                              │
+         └──────────────────────────────┼──────────────────────────────┘
+                                        │
+                              fetch_filings (SEC EDGAR 8-K)
+                                        │
+                              overlay: RVOL, extended hours, macro SPY/QQQ
+                                        │
+                              rules.build_alerts()  ← filtri restrittivi
+                                        │
+                              filter_fresh()        ← dedupe Redis/file
+                                        │
+                              filter_alerts()       ← quality gate unified (opz.)
+                                        │
+                              enrich_alert()        ← score + buy target
+                                        │
+                              format_alerts()       ← testo Telegram
+                                        │
+                              telegram.send_message()
+                                        │
+                              performance_tracker.record_sent()
+```
 
-| Filtro | Soglia default |
-|--------|----------------|
-| RVOL | ≥ 3× su baseline **robusta** (trimmed 10%) |
-| Dollar volume pre/AH | ≥ $250k (megacap), ≥ $500k (high_beta) |
-| 8-K SEC | Item **2.02**, **1.01**, **5.02**, **8.01** |
-| Earnings proximity | Utili entro **72h** → score 0, tag `[RISK: Earnings in < 72h]` |
-| Halt / LULD | `quote.halted = true` → scarta extended_hours, RVOL, peer |
-| News LLM | `is_catalyst` + score ≥ 6; timeout → catalizzatori primari |
-| Macro stress | SPY/QQQ ≤ −1.5% → setup min **8/10** |
-| Dedupe | Ticker + **2h** + (Jaccard ≥ 0.65 OR LLM) |
-| Target swing | **min(P + 1.5×ATR, Resistenza_20g)** |
-| Stop swing | **1.0 × ATR(14)** |
+### 3.1 Analisi on-demand (parallela agli alert)
 
-## RVOL baseline robusta
+```text
+python -m finance_alert --analyze NVDA
+        │
+        ├── fundamental.py → stock_analysis/scoring_engine (Yahoo only)
+        ├── quantitative.py → finance_analyzer/services (CAGR, MC, buyability)
+        └── regulatory/hub.py → FCA/AMF/ESMA/… per suffisso ticker
+        │
+        └── unified.py → score 0–10 + buy target → SQLite + stdout
+```
 
-Problema: un giorno di utili straordinari gonfia la media semplice e abbassa il RVOL reale.
+---
 
-Soluzione: `RVOL = V_attuale / robust_avg(V_20g)` dove `robust_avg` usa **media trimmed 10%** (o mediana se < 5 campioni).
+## 4. MODULO 1 — FINANCE NOTIFY (alert intraday)
 
-## Performance tracker (feedback loop)
+### 4.1 Tipi di alert (`Alert.tipo`)
 
-File: `data/performance_tracker.json`
+| Tipo | Trigger | Priorità swing |
+|------|---------|----------------|
+| `earnings_surprise` | EPS/revenue surprise > soglia | Alta |
+| `filing_8k` | SEC 8-K item 2.02/1.01/5.02/8.01 | Alta |
+| `extended_hours` | Gap pre/AH ≥ 1.5% + RVOL + $ volume | Alta |
+| `peer_lag` | Leader cluster +4%, peer < +1% | Media |
+| `news` | Wire + LLM catalizzatore score ≥ soglia | Media |
+| `earnings_soon` | Utili entro N ore (watchlist) | Informativo |
+| `price_spike` / `momentum` | Disabilitati in modalità `only_upside` | Bassa |
 
-Per ogni alert inviato salva entry, target, stop e aggiorna prezzi a **+1**, **+3**, **+7** giorni.
+### 4.2 Pipeline filtri (`rules.py`)
 
-Metriche calcolate:
-- **Win Rate %**
-- **R-Ratio medio**
-- **Aspettativa** \(E = P_{win} \times Target_{medio} - P_{loss} \times Stop_{medio}\)
+Ogni alert potenziale passa **tutti** i filtri attivi. Se uno fallisce → silenziato.
 
-## Fonti dati (produzione)
+| Filtro | Parametro YAML | Valore debug attuale | Produzione consigliata |
+|--------|----------------|----------------------|------------------------|
+| RVOL minimo | `rules.volume.min_rvol` | **1.5** | 3.0 |
+| LLM score min | `rules.llm.min_llm_score` | **4** | 6 |
+| Dollar volume AH | `rules.volume.min_dollar_volume` | $250k | $250k |
+| Dollar volume high-beta | `min_dollar_volume_high_beta` | $500k | $500k |
+| Earnings gate 72h | `rules.earnings_gate_enabled` | **false** | true |
+| News wire obbligatorio | `rules.news_require_wire` | true | true |
+| News min score | `rules.news_min_score` | 7 | 6–7 |
+| Macro stress | SPY/QQQ ≤ −1.5% → min setup 8 | attivo | attivo |
+| Cap gap ATR | \|ΔP\| ≥ 1.5×ATR → scarta | attivo | attivo |
+| Halt/LULD | `quote.halted` → scarta | attivo | attivo |
 
-### Wire RSS
+**Earnings gate:** se `earnings_gate_enabled: true` e utili entro 72h → `setup_score = 0`, alert scartato con tag `[RISK: Earnings in < 72h]`.
 
-| Fonte | URL |
-|-------|-----|
-| PR Newswire | `https://www.prnewswire.com/rss/news-releases-list.rss` |
-| GlobeNewswire Earnings | `…/subjectcode/27-Earnings%20Releases/…` |
+### 4.3 RVOL robusto
 
-### SEC EDGAR 8-K
+```text
+RVOL = volume_attuale / robust_avg(volume_20_giorni)
+```
 
-| Fonte | Ruolo |
-|-------|-------|
-| API `submissions/CIK{cik}.json` | Primaria (filtri item) |
-| Atom `browse-edgar?type=8-K&output=atom` | Backup discovery |
+`robust_avg` = media trimmed 10% (outlier-resistant). Cache in `data/rvol_baseline.json`.
 
-## Watchlist
+### 4.4 Piano swing (target/stop)
 
-**Megacap:** NVDA, AAPL, MSFT, GOOGL, AMZN, META, TSLA, AMD, AVGO, SMCI  
-**Mid-cap beta:** PLTR, COIN, SOFI, MARA, HOOD  
-**Cluster:** `semis`, `megacap`, `high_beta`
+Calcolato in `swing.py` + `technical.py`:
 
-## Scheduling: Modal.com (consigliato)
+- **Target:** `min(prezzo + 1.5×ATR(14), resistenza_20g)`
+- **Stop:** `prezzo − 1.0×ATR(14)`
+- **Setup score:** 0–10 combinando tipo alert, RVOL, LLM, macro
 
-GitHub Actions ha latenza 5–10 min nella coda. **Modal** offre ~$30/mese di crediti gratuiti.
+### 4.5 Fonti dati notify
+
+| Fonte | File | API key |
+|-------|------|---------|
+| Finnhub | `sources/finnhub.py` | `FINNHUB_API_KEY` ✓ |
+| SEC EDGAR | `sources/edgar.py` | `SEC_CONTACT_EMAIL` |
+| PR Newswire / GlobeNewswire | `sources/wire_rss.py` | — |
+| Yahoo extended | `sources/yahoo.py` | — |
+| LLM news filter | `news_llm.py` | `GROQ_API_KEY` o `GEMINI_API_KEY` |
+| Dedupe | `state_store.py` | Upstash Redis (opz.) |
+
+### 4.6 Watchlist attuale (19 ticker)
+
+Megacap: NVDA, AAPL, MSFT, GOOGL, AMZN, META, TSLA, AMD, AVGO, SMCI  
+High-beta: PLTR, COIN, SOFI, MARA, HOOD, MSTR, RIOT, SOXL, BITO
+
+Cluster in YAML: `semis`, `megacap`, `high_beta`.
+
+### 4.7 Scheduling
+
+| Canale | Frequenza | File |
+|--------|-----------|------|
+| **Modal.com** (primario) | 60s finestre volatili; 15m baseline | `modal_app.py` |
+| **GitHub Actions** (backup) | 15 min + 3 min | `.github/workflows/telegram-borsa-alerts.yml` |
+| **Locale** | manuale | `python -m finance_alert` |
+
+Deploy Modal:
 
 ```powershell
 pip install -r requirements-modal.txt
@@ -127,60 +224,351 @@ modal secret create finance-alert TELEGRAM_BOT_TOKEN=... FINNHUB_API_KEY=...
 modal deploy modal_app.py
 ```
 
-| Job Modal | Cron (UTC) | Frequenza |
-|-----------|------------|-----------|
-| `scan_high_vol_morning` | `*/1 12-13` lun–ven | 60s (~14–15:30 CET) |
-| `scan_high_vol_evening` | `*/1 20` lun–ven | 60s (~22:00 CET) |
-| `scan_baseline` | `*/15 8-23` lun–ven | 15 min |
+---
 
-GitHub Actions resta come **backup** (`telegram-borsa-alerts.yml`).
+## 5. MODULO 2 — Stock Analysis (fondamentale)
 
-## Edge cases
+### 5.1 Scoring 0–100
 
-| Regola | Comportamento |
-|--------|---------------|
-| Cap gap pre-market | Scarta se \|ΔP\| ≥ 1.5×ATR |
-| Target vs resistenza | `min(P + 1.5×ATR, Resistenza_20g)` |
-| Fallback LLM | Solo catalizzatori primari a score 6 |
-| Parsing Yahoo | Fallback Finnhub |
-| RSS 403 | UA browser via `get_feed()` |
-| Earnings < 72h | Blocco setup + tag rischio |
-| Halt/LULD | Scarta quote non affidabili |
+Motore: `stock_analysis/scoring_engine.py`
 
-## Stato persistente
+Categorie (pesi base, override per settore REIT/BDC/FINANCIALS/TECH/…):
 
-| Store | Contenuto |
-|-------|-----------|
-| Upstash Redis | Dedupe alert |
-| `data/rvol_baseline.json` | Profilo volume robusto 20g |
-| `data/performance_tracker.json` | Audit trail + forward test |
-| `data/telegram_alerts_sent.json` | Fallback dedupe locale |
-| `data/last_scan.json` | Ultimo scan (Streamlit) |
+| Categoria | Max punti |
+|-----------|-----------|
+| Profitabilità | 15 |
+| Valutazione | 15 |
+| Salute finanziaria | 15 |
+| Cash flow | 10 |
+| Dividendo | 10 |
+| Crescita | 10 |
+| Margini/efficienza | 8 |
+| Tecnico/momentum | 8 |
+| Consenso analisti | 10 |
+| Insider/institutional | 6 |
+| Settore/contesto | 6 |
+| Smart Money 13F | +0…+3 bonus |
 
-## Comandi
+**Verdetto:** COMPRA FORTE (≥80), COMPRA (≥60), NEUTRO (≥40), EVITA (≥20), EVITA FORTE (<20).
+
+**Affidabilità:** servono ≥ 5/7 campi critici Yahoo (`price, pe, eps, market_cap, rev_growth, fcf, de`).
+
+### 5.2 Buy target
+
+Formula in `buy_target()`: min di:
+
+- Sconto fondamentale (95%/90%/85%/75% del prezzo per fascia score)
+- Target analisti × 0.92 (se ≥ 5 analisti)
+- Cap valuation settoriale (BVPS, NAV, …)
+
+Layer unified (`fundamental.py`) corregge target assurdi su growth stock (BVPS cap troppo basso).
+
+### 5.3 Modalità auto (senza HTML)
 
 ```powershell
-python -m finance_alert --status
-python -m finance_alert --dry-run
-python -m finance_alert --test
-streamlit run app.py
-modal deploy modal_app.py
+cd stock_analysis
+python auto_analyze.py NVDA --add      # analizza + salva portafoglio
+python auto_analyze.py --scan          # scan + Telegram se Δscore ≥ 3
 ```
 
-## Secrets
+API Flask (`:5055`):
 
-| Secret | Obbligatorio | Ruolo |
-|--------|:---:|-------|
-| `TELEGRAM_BOT_TOKEN` | ✓ | Invio alert |
-| `TELEGRAM_CHAT_ID` | ✓ | Destinatario |
-| `FINNHUB_API_KEY` | ✓ | Quote, earnings, news |
-| `UPSTASH_REDIS_REST_URL/TOKEN` | consigliato | Dedupe |
-| `GROQ_API_KEY` / `GEMINI_API_KEY` | consigliato | LLM news |
-| `SEC_CONTACT_EMAIL` | consigliato | User-Agent SEC |
+- `GET /api/auto-analyze/<TICKER>`
+- `GET/POST/DELETE /api/portfolio`
+- `POST /api/portfolio/scan`
 
-## Changelog
+DB: `stock_analysis/data/stock_analysis.db`
 
-- **2026-09-01 (f):** RVOL robusto (trimmed/median); performance_tracker; earnings gate 72h; halt filter; Modal.com deploy.
-- **2026-09-01 (e):** SEC Atom backup; feed wire produzione.
-- **2026-09-01 (a–d):** Upstash, ATR, dedupe ibrida, edge cases, wire RSS.
-- **2026-08-31:** RVOL cache, macro filter, LLM news.
+---
+
+## 6. MODULO 3 — Finance Analyzer (quantitativo)
+
+### 6.1 Metriche calcolate
+
+Backend FastAPI `finance_analyzer/backend/main.py`:
+
+| Metrica | Modulo |
+|---------|--------|
+| CAGR annuo | `services/analytics.py` |
+| YTD, volatilità, max drawdown | idem |
+| Monte Carlo 30/252g | `services/forecast.py` |
+| Buyability % analisti | `services/market_data.py` |
+| Prezzi Stooq → Yahoo fallback | `services/stooq.py`, `yahoo.py` |
+
+### 6.2 Avvio
+
+```powershell
+# Backend
+cd finance_analyzer/backend
+python -m venv .venv && .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+
+# Frontend
+cd finance_analyzer/frontend
+npm install && npm run dev    # localhost:3000
+```
+
+### 6.3 Portafoglio + alert
+
+- `POST /api/portfolio?ticker=NVDA` — aggiungi ticker
+- `POST /api/portfolio/scan?notify=true` — ricalcola buyability, alert Telegram se Δ ≥ 5 pp
+- CLI: `python scripts/scan_portfolio_alerts.py`
+
+DB: `finance_analyzer/backend/data/finance.db`
+
+---
+
+## 7. MODULO 4 — Regulatory Hub
+
+Router: `finance_alert/regulatory/hub.py` — rileva regione dal suffisso ticker.
+
+| Suffisso / regione | Autorità | Implementazione |
+|--------------------|----------|-----------------|
+| US (default) | SEC | `sources/edgar.py` (già in notify) |
+| `.L` / `.IL` | UK FCA | REST API V0.1 |
+| `.T` / `.TO` | JP FSA | EDINET API v2 |
+| `.PA` | FR AMF | OpenDataSoft info-financiere |
+| `.DE` / `.F` | DE BaFin | scraping portale |
+| `.MI` | IT CONSOB | scraping elenchi pubblici |
+| EU cross | ESMA | Solr sanctions + FIRDS |
+
+**Penalty score unificato:** 0–3 punti se sanzioni/avvisi/disciplinary history.
+
+### Secrets regolatori
+
+```env
+FCA_AUTH_EMAIL=...          # email registrata su register.fca.org.uk/Developer
+FCA_API_KEY=...
+FSA_EDINET_API_KEY=...      # disclosure2.edinet-fsa.go.jp
+SEC_CONTACT_EMAIL=...
+```
+
+AMF, ESMA, BaFin, CONSOB → nessuna chiave (open data / scraping).
+
+---
+
+## 8. Score unificato (Quant Platform)
+
+File: `finance_alert/analysis/unified.py`
+
+### Formula
+
+Con catalizzatore (alert attivo):
+
+```text
+unified = 0.50 × (fundamental/10) + 0.25 × quant_score + 0.25 × catalyst_score − regulatory_penalty
+```
+
+Senza catalizzatore (analisi statica):
+
+```text
+unified = 0.55 × (fundamental/10) + 0.45 × quant_score − regulatory_penalty
+```
+
+Clamp finale: **0–10**.
+
+### Quality gate (opzionale)
+
+In `config/unified.yaml`:
+
+```yaml
+unified:
+  quality_gate_block: false   # true = silenzia alert se score fondamentale basso
+  min_fundamental_score: 40   # 0–100
+  min_unified_score: 5.0      # 0–10
+```
+
+### Esempio messaggio Telegram arricchito
+
+```text
+FINANCE NOTIFY — swing 2–3% / ~7 giorni
+2026-09-02 16:30 Roma
+
+📊 Quant Platform: score fondamentale + quant + regolatori.
+
+Catalizzatore wire
+NVDA — contratto gov · 8/10 · BUY
+[body alert con target/stop ATR]
+
+📊 Score unificato: 7.3/10
+   Fondamentale: 76/100 | Quant: 7.0/10
+   Verdetto: COMPRA
+   🎯 Prezzo acquisto consigliato: $201.46
+Chart: https://www.tradingview.com/chart/?symbol=NVDA
+```
+
+---
+
+## 9. Configurazione completa
+
+### 9.1 `config/watchlist.yaml`
+
+Sezioni principali:
+
+- `watchlist[]` — ticker, name, cik (SEC)
+- `rules.enabled_tipos` — quali alert generare
+- `rules.only_upside` — true = no spike/momentum tardivi
+- `rules.swing.*` — ATR target/stop, min_setup_score
+- `rules.volume.*` — RVOL, dollar volume
+- `rules.llm.*` — soglie LLM news
+- `rules.macro.*` — SPY/QQQ stress filter
+- `rules.dedupe.*` — finestra 2h, Jaccard 0.65
+- `rules.earnings_gate_enabled` — blocco 72h
+- `clusters[]` — peer groups per catch-up
+- `edgar.*` — form 8-K, max_age_hours
+
+### 9.2 `config/unified.yaml`
+
+- `unified.enabled` — arricchimento Telegram on/off
+- `unified.enrich_telegram` — contesto score in messaggio
+- `unified.screener_tickers[]` — ticker extra per `--screen`
+- `unified.screener_min_score` — soglia watchlist dinamica DB
+
+### 9.3 Variabili ambiente (`.env`)
+
+| Variabile | Obbl. | Modulo |
+|-----------|:-----:|--------|
+| `TELEGRAM_BOT_TOKEN` | ✓ | Notify + Stock Analysis + Finance Analyzer |
+| `TELEGRAM_CHAT_ID` | ✓ | idem |
+| `FINNHUB_API_KEY` | ✓ | Notify, quote, earnings |
+| `GROQ_API_KEY` / `GEMINI_API_KEY` | ○ | LLM news filter |
+| `SEC_CONTACT_EMAIL` | ○ | SEC User-Agent |
+| `UPSTASH_REDIS_REST_URL/TOKEN` | ○ | Dedupe distribuita |
+| `FCA_AUTH_EMAIL` + `FCA_API_KEY` | ○ | UK FCA |
+| `FSA_EDINET_API_KEY` | ○ | Japan EDINET |
+| `FMP_API_KEY` / `TWELVE_DATA_API_KEY` | ○ | Fallback Finance Analyzer |
+| `SCORE_ALERT_MIN_DELTA` | ○ | Stock Analysis (default 3) |
+| `FA_SCORE_ALERT_MIN_DELTA` | ○ | Finance Analyzer (default 5) |
+
+Il loader `finance_alert/env.py` legge anche `.env` sibling e `finance_analyzer/.env`.
+
+---
+
+## 10. Database SQLite
+
+### 10.1 `data/quant_platform.db` (Quant Platform)
+
+| Tabella | Contenuto |
+|---------|-----------|
+| `ticker_scores` | Storico score unified per ticker/ts |
+| `dynamic_watchlist` | Ticker promossi da screener |
+| `alert_audit` | Alert inviati/scartati con score |
+
+### 10.2 `stock_analysis/data/stock_analysis.db`
+
+| Tabella | Contenuto |
+|---------|-----------|
+| `portfolio` | Ticker seguiti |
+| `score_history` | Storico score fondamentale |
+
+### 10.3 `finance_analyzer/backend/data/finance.db`
+
+| Tabella | Contenuto |
+|---------|-----------|
+| `symbols` | Universo titoli/ETF |
+| `analysis_cache` | Cache analisi JSON |
+| `user_portfolio` | Portafoglio utente |
+| `score_history` | Storico buyability |
+
+---
+
+## 11. CLI — tutti i comandi
+
+### FINANCE NOTIFY / Quant Platform
+
+```powershell
+python -m finance_alert --status          # fonti + watchlist
+python -m finance_alert --dry-run         # scan senza invio (debug filtri)
+python -m finance_alert --test            # ping Telegram
+python -m finance_alert                   # scan + invio
+python -m finance_alert --analyze NVDA    # score unificato
+python -m finance_alert --regulatory SAP.DE
+python -m finance_alert --screen --update-watchlist
+streamlit run app.py
+modal deploy modal_app.py
+pytest tests/
+```
+
+### Stock Analysis
+
+```powershell
+cd stock_analysis
+python auto_analyze.py AAPL --add
+python auto_analyze.py --scan
+python app.py                             # Flask :5055
+```
+
+### Finance Analyzer
+
+```powershell
+cd finance_analyzer/backend
+uvicorn main:app --port 8000
+python scripts/scan_portfolio_alerts.py
+```
+
+---
+
+## 12. Debug — perché zero notifiche
+
+Checklist in ordine:
+
+1. **`python -m finance_alert --dry-run`** — legge log: quale filtro scarta?
+2. **Secrets Modal/GitHub** — `TELEGRAM_BOT_TOKEN`, `FINNHUB_API_KEY` associati?
+3. **Watchlist** — solo 19 ticker; giornate senza catalizzatori = 0 alert normale
+4. **Filtri** — RVOL/LLM/$ volume/earnings gate; in debug sono già rilassati in YAML
+5. **Macro stress** — mercato −1.5% → soglia setup 8/10
+6. **Dedupe** — stesso ticker entro 2h silenziato
+
+Per testare la catena Telegram: abbassare temporaneamente soglie in YAML, poi `--dry-run`, poi `--test`, poi scan reale.
+
+---
+
+## 13. Test automatici
+
+```powershell
+pytest tests/test_rules.py tests/test_unified_platform.py tests/test_production_upgrades.py
+```
+
+Copertura: RVOL robusto, earnings gate on/off, regulatory region detect, unified config load.
+
+---
+
+## 14. Costi (tier gratuito)
+
+| Servizio | Costo |
+|----------|-------|
+| Finnhub free | 60 req/min |
+| Modal.com | ~$30/mese crediti free |
+| GitHub Actions | free public repo |
+| Telegram Bot API | gratis |
+| Groq/Gemini Flash | free tier |
+| SEC/AMF/ESMA/… | gratis |
+| yfinance / Stooq | gratis (non ufficiale Yahoo) |
+
+---
+
+## 15. Roadmap / limiti noti
+
+- [ ] BaFin/CONSOB: no API bulk ufficiale — scraping limitato
+- [ ] EDINET: query per data, non per ticker diretto
+- [ ] Yahoo chart: può dare 429 — fallback Finnhub
+- [ ] HTML TIKR/Investing: opzionale per metriche niche (FFO, CET1)
+- [ ] Quality gate unified: disattivato in debug (`quality_gate_block: false`)
+
+---
+
+## 16. Changelog unificazione
+
+| Data | Change |
+|------|--------|
+| 2026-09-02 | Repo **Final_Finance**: unificazione 3 moduli + regulatory hub |
+| 2026-09-02 | Quant Platform: enrich Telegram, unified score, SQLite |
+| 2026-09-02 | Debug: RVOL 1.5, LLM 4, earnings gate off, +MSTR/RIOT/SOXL/BITO |
+| 2026-09-02 | stock_analysis: auto_analyze, portfolio DB, Telegram score alerts |
+| 2026-09-02 | finance_analyzer: portfolio API, scan_portfolio_alerts |
+| 2026-09-01 | FINANCE NOTIFY: Modal, RVOL robusto, performance tracker |
+
+---
+
+*Documento generato per analisi AI/architettura — aggiornare quando cambiano soglie YAML o moduli.*

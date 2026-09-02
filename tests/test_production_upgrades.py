@@ -33,8 +33,26 @@ def test_earnings_risk_blocks_alert():
         setup_score=8,
     )
     earnings = [EarningsEvent(ticker="NVDA", date="2026-09-02", hour="amc")]
-    assert _apply_earnings_risk(alert, earnings, now) is None
+    assert _apply_earnings_risk(alert, earnings, now, enabled=True) is None
     assert "RISK: Earnings in < 72h" in alert.tags
+
+
+def test_earnings_gate_disabled_passes():
+    from finance_alert.rules import _apply_earnings_risk
+
+    now = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+    alert = Alert(
+        key="news|NVDA|x",
+        tipo="news",
+        ticker="NVDA",
+        titolo="test",
+        body="body",
+        setup_score=8,
+    )
+    earnings = [EarningsEvent(ticker="NVDA", date="2026-09-02", hour="amc")]
+    kept = _apply_earnings_risk(alert, earnings, now, enabled=False)
+    assert kept is alert
+    assert kept.setup_score == 8
 
 
 def test_skips_halted_extended_hours():

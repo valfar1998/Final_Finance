@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SIBLING_ENV_DIRS = (
     "Finance-Analyzer-main",
+    "finance_analyzer",
     "football-predictor",
     "filtro_telegram_recensioni",
     "telegram-offerte-sconto",
@@ -24,8 +25,13 @@ KEY_NAMES = (
     "BENZINGA_API_TOKEN",
     "ALPHA_VANTAGE_API_KEY",
     "SEC_CONTACT_EMAIL",
+    "FCA_API_KEY",
+    "FCA_AUTH_EMAIL",
+    "FSA_EDINET_API_KEY",
     "SPIKE_PCT",
     "SURPRISE_EPS_PCT",
+    "UNIFIED_MIN_SCORE",
+    "UNIFIED_MIN_FUNDAMENTAL",
 )
 
 

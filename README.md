@@ -1,4 +1,27 @@
-# finance-notify
+# Final Finance — Quant Platform Unificata
+
+Alert Telegram intraday + scoring fondamentale + analisi quantitativa + regolatori internazionali.
+
+**Documentazione completa:** [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md) (architettura, filtri, score, deploy, debug).
+
+## Quick start
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env    # TELEGRAM + FINNHUB
+
+python -m finance_alert --status
+python -m finance_alert --dry-run
+python -m finance_alert --analyze NVDA
+```
+
+Moduli inclusi: `finance_alert/` · `stock_analysis/` · `finance_analyzer/`
+
+---
+
+# finance-notify (legacy name)
 
 Alert Telegram su **eventi di borsa verificabili** (utili, surprise EPS, gap pre/after-hours, peer in ritardo, 8-K).  
 Job periodico + bot Telegram. **Non è una previsione certa del +7%** prima che succeda.

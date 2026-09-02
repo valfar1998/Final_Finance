@@ -1,0 +1,39 @@
+# Quant Platform — configurazione unificata (finance-alert + stock_analysis + Finance-Analyzer)
+
+unified:
+  enabled: true
+  enrich_telegram: true          # arricchisce alert Telegram con score e buy target
+  quality_gate_block: false      # true = blocca alert se score fondamentale < soglia
+  min_fundamental_score: 40      # 0-100 (equivalente 4/10)
+  min_unified_score: 5.0         # 0-10 score combinato minimo per evidenziare in alert
+  include_regulatory: true       # controlli FCA/AMF/ESMA/CONSOB/BaFin/EDINET
+  screener_min_score: 7.0        # ticker con score ≥ questo entrano in watchlist dinamica DB
+
+  # Ticker extra per screening settimanale (oltre a watchlist.yaml)
+  screener_tickers:
+    - MSTR
+    - RIOT
+    - SOXL
+    - SMCI
+    - BITO
+    - ASML
+    - SAP.DE
+    - MC.PA
+    - RACE.MI
+    - 7203.T
+
+regulatory:
+  # SEC via sources/edgar.py (SEC_CONTACT_EMAIL in .env)
+  fca:
+    enabled: true
+  fsa_edinet:
+    enabled: true
+    lookback_days: 14
+  amf:
+    enabled: true
+  esma:
+    enabled: true
+  bafin:
+    enabled: true
+  consob:
+    enabled: true

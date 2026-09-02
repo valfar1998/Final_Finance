@@ -1,2 +1,4 @@
 PyYAML>=6.0
 streamlit>=1.57
+yfinance>=0.2.40
+beautifulsoup4>=4.12

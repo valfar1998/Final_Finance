@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Analisi Azioni — Scoring</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <main class="shell">
+    <header class="hero">
+      <p class="brand">Stock Analysis</p>
+      <h1>Ticker Yahoo + HTML multi-fonte</h1>
+      <p class="lead">
+        I dati Yahoo arrivano via API. Investing è obbligatorio.
+        Per TIKR basta un <strong>dump unico</strong>: trascina tutti gli HTML SingleFile
+        (Overview, Financials, Ratios…) — lo smistamento è automatico.
+      </p>
+    </header>
+
+    <section class="api-box checklist">
+      <div>
+        <strong>Flusso</strong>
+        <ol>
+          <li>Ticker Yahoo + <strong>settore</strong> corretto</li>
+          <li>Investing.com — overview SingleFile</li>
+          <li>TIKR — tutti gli HTML insieme (auto-classifica); le 10 tab restano opzionali</li>
+          <li>Opzionali: Finviz, MarketWatch, GuruFocus, TipRanks, Morningstar</li>
+        </ol>
+        <p class="mini">Campi critici Yahoo: {{ critical|join(', ') }}. Priorità: TIKR (tutte le tab) → Investing → altre HTML.</p>
+      </div>
+    </section>
+
+    <form id="form" class="panel" enctype="multipart/form-data">
+      <div class="controls top-controls">
+        <label class="ticker-field">
+          <span>Ticker Yahoo</span>
+          <input type="text" name="ticker" id="ticker" placeholder="GOOGL" required maxlength="12" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="sector">
+          <span>Settore</span>
+          <select name="sector" id="sector" required>
+            {% for s in sectors %}
+            <option value="{{ s }}" {% if s == 'GENERICO' %}selected{% endif %}>{{ sector_labels.get(s, s) }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <div class="sector-hint" id="sector-hint" hidden>
+        <strong>Metriche chiave</strong>
+        <ul id="sector-metrics-list"></ul>
+      </div>
+
+      <h3 class="upload-group-title">Obbligatorio</h3>
+      <div class="uploads">
+        <label class="drop" data-required="true">
+          <input type="file" name="investing" id="investing" accept=".html,.htm,.txt" multiple />
+          <span class="drop-title">Investing.com</span>
+          <span class="drop-hint">1–{{ max_html_files }} file · oppure nel dump TIKR se è un HTML Investing</span>
+          <span class="file-name" id="name-investing">Nessun file</span>
+        </label>
+      </div>
+
+      <h3 class="upload-group-title">TIKR — dump unico <span class="badge-opt">consigliato</span></h3>
+      <p class="upload-group-note">
+        Salva le tab TIKR con SingleFile (stessi nomi vanno bene). Trascina <strong>tutti</strong> gli HTML
+        in questo riquadro: lo script legge l’URL salvato nel file
+        (<code>/stock/about</code>, <code>financials?tab=cf</code>, <code>multiples</code>…) e li smista da solo.
+        Non serve un box per tab.
+      </p>
+      <div class="uploads uploads-tikr-auto">
+        <label class="drop drop-tikr drop-tikr-auto">
+          <input type="file" name="tikr_auto" id="tikr_auto" accept=".html,.htm,.txt" multiple />
+          <span class="drop-title">Tutti gli HTML TIKR insieme</span>
+          <span class="drop-hint">Overview + IS/BS/CF + Ratios + Valuation + Estimates + … · max {{ max_tikr_dump }} file</span>
+          <span class="drop-why">Classificazione automatica dall’URL SingleFile (va bene anche l’HTML Investing)</span>
+          <span class="file-name" id="name-tikr_auto">Nessun file</span>
+        </label>
+      </div>
+      <details class="manual-tikr">
+        <summary>Assegnazione manuale per tab (opzionale)</summary>
+        <p class="upload-group-note">
+          Usa questi box solo se vuoi forzare una tab, o se SingleFile non ha salvato l’URL.
+        </p>
+        <div class="uploads uploads-tikr">
+          {% for src in tikr_sources %}
+          <label class="drop drop-tikr">
+            <input type="file" name="{{ src.id }}" id="{{ src.id }}" accept=".html,.htm,.txt" multiple />
+            <span class="drop-title">{{ src.label }}</span>
+            <span class="drop-hint">{{ src.hint }} · max {{ max_html_files }}</span>
+            <span class="drop-why">{{ src.why }}</span>
+            <span class="drop-url">{{ src.url_hint }}</span>
+            <span class="file-name" id="name-{{ src.id }}">Nessun file</span>
+          </label>
+          {% endfor %}
+        </div>
+      </details>
+
+      <h3 class="upload-group-title">Altre fonti HTML <span class="badge-opt">opzionale</span></h3>
+      <div class="uploads">
+        {% for src in extra_sources %}
+        <label class="drop drop-extra">
+          <input type="file" name="{{ src.id }}" id="{{ src.id }}" accept=".html,.htm,.txt" multiple />
+          <span class="drop-title">{{ src.label }}</span>
+          <span class="drop-hint">{{ src.hint }} · max {{ max_html_files }}</span>
+          <span class="drop-url">{{ src.url_hint }}</span>
+          <span class="file-name" id="name-{{ src.id }}">Nessun file</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      <div class="controls">
+        <button type="submit" id="btn">Avvia scoring</button>
+      </div>
+    </form>
+
+    <section class="status" id="status" hidden>
+      <div class="spinner"></div>
+      <p>Download Yahoo + lettura HTML…</p>
+    </section>
+
+    <section class="error" id="error" hidden></section>
+
+    <section class="coverage" id="coverage" hidden>
+      <h2>Copertura dati</h2>
+      <p id="coverage-text"></p>
+      <div class="bars">
+        <div class="bar"><span id="bar-crit"></span></div>
+      </div>
+      <ul class="tikr-map" id="tikr-map" hidden></ul>
+    </section>
+
+    <section class="result" id="result" hidden>
+      <div class="result-head">
+        <h2>Report</h2>
+        <div class="actions">
+          <button type="button" id="copy">Copia</button>
+          <button type="button" id="download" class="ghost">Scarica .txt</button>
+        </div>
+      </div>
+      <p class="meta" id="meta"></p>
+      <pre id="output"></pre>
+    </section>
+
+    <footer class="foot">Locale · Yahoo via yfinance · report in <code>output/</code> · non è consulenza finanziaria</footer>
+  </main>
+  <script>
+    window.SECTOR_METRICS = {{ sector_metrics | tojson }};
+    window.TIKR_SOURCE_IDS = {{ tikr_sources | map(attribute='id') | list | tojson }};
+    window.EXTRA_SOURCE_IDS = {{ extra_sources | map(attribute='id') | list | tojson }};
+    window.MAX_HTML_FILES = {{ max_html_files }};
+    window.MAX_TIKR_DUMP = {{ max_tikr_dump }};
+  </script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -12,6 +12,14 @@ data/telegram_alerts_sent.json
 data/last_scan.json
 data/cik_cache.json
 data/rvol_baseline.json
+data/performance_tracker.json
+data/quant_platform.db
+stock_analysis/data/
+stock_analysis/output/*.txt
+finance_analyzer/backend/data/
+finance_analyzer/backend/.venv/
+finance_analyzer/frontend/node_modules/
+finance_analyzer/frontend/.next/
 # data/.actions_keepalive è tracciato apposta dal workflow keepalive
 *.log
 .DS_Store
