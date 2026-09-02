@@ -104,7 +104,11 @@ Watchlist e soglie: `config/watchlist.yaml`.
    - `TELEGRAM_BOT_TOKEN`
    - `TELEGRAM_CHAT_ID`
    - `FINNHUB_API_KEY`
-   - opzionali: `FMP_API_KEY`, `TWELVE_DATA_API_KEY`, `POLYGON_API_KEY`, `NEWSAPI_API_KEY`, `MARKETAUX_API_TOKEN`, `BENZINGA_API_TOKEN`, `SEC_CONTACT_EMAIL`
+   - **consigliato:** `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (dedupe tra run CI)
+   - opzionali: `FMP_API_KEY`, `TWELVE_DATA_API_KEY`, `POLYGON_API_KEY`, `NEWSAPI_API_KEY`, `MARKETAUX_API_TOKEN`, `BENZINGA_API_TOKEN`, `GEMINI_API_KEY`, `NEWS_LLM_PROVIDER`, `SEC_CONTACT_EMAIL`, `FCA_*`, `FSA_EDINET_API_KEY`
+
+**Upstash Redis (dedupe):** [console.upstash.com](https://console.upstash.com) → Create database → tab REST → copia URL e token nei secrets. Senza Upstash, la dedupe usa solo cache file locale (ogni run GitHub Actions parte da zero).
+
 2. Workflow `Telegram borsa alerts`: ogni 15 min **pre-market → after-hours USA** (08–23 UTC, lun–ven) + digest pre-open
 3. Dopo il primo push: Actions → workflow → **Run workflow** (test = true) per verificare Telegram
 

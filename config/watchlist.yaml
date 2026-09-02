@@ -64,8 +64,7 @@ watchlist:
 rules:
   only_upside: true
   peer_resistance: true
-  # Debug temporaneo: disattiva blocco utili < 72h (rimetti true in produzione)
-  earnings_gate_enabled: false
+  earnings_gate_enabled: true
   enabled_tipos:
     - earnings_surprise
     - filing_8k
@@ -87,13 +86,13 @@ rules:
 
   llm:
     enabled: true
-    prefilter_score: 4
-    min_llm_score: 4
+    prefilter_score: 6
+    min_llm_score: 6
     timeout_sec: 3
     fallback_keyword_score: 8
 
   volume:
-    min_rvol: 1.5
+    min_rvol: 3.0
     require_for_extended: true
     require_for_spike: true
     peer_leader_min_rvol: 2.5

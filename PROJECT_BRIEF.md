@@ -159,13 +159,13 @@ python -m finance_alert --analyze NVDA
 
 Ogni alert potenziale passa **tutti** i filtri attivi. Se uno fallisce → silenziato.
 
-| Filtro | Parametro YAML | Valore debug attuale | Produzione consigliata |
-|--------|----------------|----------------------|------------------------|
-| RVOL minimo | `rules.volume.min_rvol` | **1.5** | 3.0 |
-| LLM score min | `rules.llm.min_llm_score` | **4** | 6 |
-| Dollar volume AH | `rules.volume.min_dollar_volume` | $250k | $250k |
-| Dollar volume high-beta | `min_dollar_volume_high_beta` | $500k | $500k |
-| Earnings gate 72h | `rules.earnings_gate_enabled` | **false** | true |
+| Filtro | Parametro YAML | Valore attuale (produzione) |
+|--------|----------------|----------------------------|
+| RVOL minimo | `rules.volume.min_rvol` | **3.0** |
+| LLM score min | `rules.llm.min_llm_score` | **6** |
+| Dollar volume AH | `rules.volume.min_dollar_volume` | $250k |
+| Dollar volume high-beta | `min_dollar_volume_high_beta` | $500k |
+| Earnings gate 72h | `rules.earnings_gate_enabled` | **true** |
 | News wire obbligatorio | `rules.news_require_wire` | true | true |
 | News min score | `rules.news_min_score` | 7 | 6–7 |
 | Macro stress | SPY/QQQ ≤ −1.5% → min setup 8 | attivo | attivo |
