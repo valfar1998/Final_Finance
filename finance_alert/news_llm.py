@@ -16,7 +16,7 @@ GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0
 
 PROMPT = """Sei un filtro per alert trading swing (2-7 giorni).
 Analizza headline e publisher. Rispondi SOLO con JSON valido, nessun altro testo:
-{"is_catalyst": true|false, "impact_score": 1-10, "driver": "breve motivo"}
+{{"is_catalyst": true|false, "impact_score": 1-10, "driver": "breve motivo"}}
 
 is_catalyst=true SOLO con driver operativo verificabile:
 - guidance raised/cut, beat/miss utili, M&A, FDA, contratto materiale, downgrade/upgrade analyst
@@ -28,7 +28,7 @@ Headline: {headline}
 """
 
 EQUIV_PROMPT = """Confronta due headline sullo stesso titolo. Rispondi SOLO JSON:
-{"equivalent": true|false}
+{{"equivalent": true|false}}
 
 equivalent=true se descrivono lo stesso evento/fatto (anche con titoli diversi).
 equivalent=false se sono notizie diverse o generiche.
