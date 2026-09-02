@@ -1,1 +1,3 @@
+# GitHub Actions / notify_borsa.py — deps minime per scan + enrich unificato
 PyYAML>=6.0
+yfinance>=0.2.40
