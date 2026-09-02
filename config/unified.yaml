@@ -9,56 +9,22 @@ unified:
   include_regulatory: true
   screener_min_score: 7.0
 
-  # ── Monitoraggio globale ──
-  # true = ogni scan include screener_tickers sotto (oltre a watchlist.yaml)
-  include_global_screener: true
-  # true = include ticker promossi da: python -m finance_alert --screen --update-watchlist
-  use_dynamic_watchlist: true
+  # Watchlist già a 100 titoli growth/quality → niente screener/dynamic extra
+  include_global_screener: false
+  use_dynamic_watchlist: false
   dynamic_min_score: 6.0
-  # Limite titoli per scan (scan più lenti → più headroom; Finnhub free ~60 req/min)
   max_scan_symbols: 100
 
-  # Universo multi-mercato (suffissi Yahoo). Aggiungi/rimuovi liberamente.
+  # Riserva (solo se riattivi include_global_screener)
   screener_tickers:
-    # USA (oltre a watchlist.yaml)
-    - MSTR
-    - RIOT
-    - SOXL
-    - BITO
-    # Europa
-    - SAP.DE
-    - MC.PA
     - ASML.AS
-    - RACE.MI
-    - NESN.SW
-    - SHEL.L
-    - SAN.MC
-    - OR.PA
-    # UK
-    - VOD.L
-    - HSBA.L
-    # Asia-Pacifico (JP / IN / TW)
+    - SAP.DE
     - 7203.T
-    - 9984.T
-    - TSM
-    - RELIANCE.NS
-    # Cina / Hong Kong (oltre a watchlist.yaml)
     - 0700.HK
-    - 9988.HK
-    - 3690.HK
-    - 600519.SS
-    - 300750.SZ
-    - 002594.SZ
+    - 005930.KS
+    - TSM
     - BABA
     - PDD
-    # Corea del Sud (KRX)
-    - 005930.KS
-    - 000660.KS
-    - 035420.KS
-    - 051910.KS
-    # Americas ex-US
-    - VALE
-    - PBR
 
 regulatory:
   fca:

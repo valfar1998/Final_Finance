@@ -1,9 +1,10 @@
-# Modalità SWING: target ATR-based (~1.5× ATR) o fallback % fisso.
-# Miglioramenti precisione: LLM news, RVOL, dedupe ibrido, 8-K 2.02/1.01/5.02/8.01.
+# Watchlist produzione — esattamente 100 titoli (max_scan_symbols: 100).
+# Criterio: priorità a crescita strutturale / qualità; esclusi crypto, 3x ETF,
+# miner, fintech ultra-volatili, ciclici fragili e titoli ad alta incertezza.
 
 watchlist:
   # ==========================================
-  # USA (Megacaps & High EBITDA Leaders)
+  # USA — megacap, semis, SaaS, health, industrial (41)
   # ==========================================
   - ticker: NVDA
     name: NVIDIA
@@ -44,12 +45,6 @@ watchlist:
   - ticker: MA
     name: Mastercard
     cik: "0001141391"
-  - ticker: JNJ
-    name: Johnson & Johnson
-    cik: "0000200406"
-  - ticker: PG
-    name: Procter & Gamble
-    cik: "0000080424"
   - ticker: UNH
     name: UnitedHealth Group
     cik: "0000731766"
@@ -65,10 +60,6 @@ watchlist:
   - ticker: AVGO
     name: Broadcom
     cik: "0001730168"
-  - ticker: SMCI
-    name: Super Micro
-    cik: "0001375365"
-  # --- Nuove Aggiunte USA (Stabilità, Semiconduttori & SaaS Leaders) ---
   - ticker: TSM
     name: Taiwan Semiconductor (TSMC)
     cik: "0001046179"
@@ -126,15 +117,6 @@ watchlist:
   - ticker: DE
     name: Deere & Company
     cik: "0000315189"
-  - ticker: MCD
-    name: McDonald's
-    cik: "0000063908"
-  - ticker: PEP
-    name: PepsiCo
-    cik: "0000077476"
-  - ticker: KO
-    name: Coca-Cola
-    cik: "0000021344"
   - ticker: HD
     name: Home Depot
     cik: "0000354950"
@@ -144,48 +126,19 @@ watchlist:
   - ticker: ACN
     name: Accenture
     cik: "0001467373"
-
-  # USA (Mid-Cap / High Beta / Momentum)
   - ticker: PLTR
     name: Palantir
     cik: "0001321655"
-  - ticker: COIN
-    name: Coinbase
-    cik: "0001679788"
-  - ticker: SOFI
-    name: SoFi
-    cik: "0001818874"
-  - ticker: MARA
-    name: Marathon Digital
-    cik: "0001507605"
-  - ticker: HOOD
-    name: Robinhood
-    cik: "0001783879"
-  - ticker: MSTR
-    name: MicroStrategy
-    cik: "0001050446"
-  - ticker: RIOT
-    name: Riot Platforms
-    cik: "0001167419"
-
-  # ETF / Prodotti derivati
-  - ticker: SOXL
-    name: Direxion Semiconductors 3X
-  - ticker: BITO
-    name: ProShares Bitcoin Strategy ETF
+  - ticker: MCD
+    name: McDonald's
+    cik: "0000063908"
 
   # ==========================================
-  # ITALIA (ITA)
+  # ITALIA (10)
   # ==========================================
   - ticker: RACE
     name: Ferrari
     cik: "0001648416"
-  - ticker: STLA
-    name: Stellantis
-    cik: "0001605484"
-  - ticker: ENI
-    name: Eni
-    cik: "0001002242"
   - ticker: ENEL.MI
     name: Enel
     cik: "0000892553"
@@ -193,7 +146,6 @@ watchlist:
     name: UniCredit
   - ticker: ISP.MI
     name: Intesa Sanpaolo
-  # --- Nuove Aggiunte Italia ---
   - ticker: STM
     name: STMicroelectronics
     cik: "0001025378"
@@ -203,17 +155,13 @@ watchlist:
     name: Terna
   - ticker: PRY.MI
     name: Prysmian
-  - ticker: MB.MI
-    name: Mediobanca
   - ticker: LDO.MI
     name: Leonardo
-  - ticker: SRG.MI
-    name: Snam
   - ticker: MONC.MI
     name: Moncler
 
   # ==========================================
-  # GERMANIA (DE)
+  # GERMANIA (6)
   # ==========================================
   - ticker: SAP
     name: SAP SE
@@ -224,28 +172,15 @@ watchlist:
   - ticker: DTEGY
     name: Deutsche Telekom (ADR)
     cik: "0001002517"
-  - ticker: MBGYY
-    name: Mercedes-Benz Group (ADR)
-  - ticker: BMWYY
-    name: BMW (ADR)
   - ticker: ALIZY
     name: Allianz (ADR)
-  # --- Nuove Aggiunte Germania ---
   - ticker: RNMBY
     name: Rheinmetall (ADR)
-  - ticker: MURGY
-    name: Munich Re (ADR)
-  - ticker: DHLGY
-    name: DHL Group (ADR)
   - ticker: IFNNY
     name: Infineon Technologies (ADR)
-  - ticker: BASFY
-    name: BASF (ADR)
-  - ticker: BAYRY
-    name: Bayer (ADR)
 
   # ==========================================
-  # FRANCIA (FR)
+  # FRANCIA (9)
   # ==========================================
   - ticker: TTE
     name: TotalEnergies
@@ -261,20 +196,15 @@ watchlist:
     name: Airbus (ADR)
   - ticker: SBGSY
     name: Schneider Electric (ADR)
-  # --- Nuove Aggiunte Francia ---
   - ticker: HESAY
     name: Hermès International (ADR)
   - ticker: VCISY
     name: Vinci (ADR)
-  - ticker: AXAHY
-    name: AXA (ADR)
   - ticker: SAFRY
     name: Safran (ADR)
-  - ticker: DANOY
-    name: Danone (ADR)
 
   # ==========================================
-  # REGNO UNITO (UK)
+  # REGNO UNITO (6)
   # ==========================================
   - ticker: SHEL
     name: Shell
@@ -282,38 +212,19 @@ watchlist:
   - ticker: AZN
     name: AstraZeneca
     cik: "0001071471"
-  - ticker: HSBC
-    name: HSBC Holdings
-    cik: "0001086380"
-  - ticker: UL
-    name: Unilever
-    cik: "0000037284"
-  - ticker: BP
-    name: BP plc
-    cik: "0000313807"
-  - ticker: GSK
-    name: GSK plc
-    cik: "0001135799"
-  # --- Nuove Aggiunte Regno Unito ---
   - ticker: RELX
     name: RELX plc
     cik: "0000923201"
   - ticker: RIO
     name: Rio Tinto
     cik: "0000863092"
-  - ticker: DEO
-    name: Diageo
-    cik: "0000835466"
-  - ticker: BTI
-    name: British American Tobacco
-    cik: "0001270800"
   - ticker: BAESY
     name: BAE Systems (ADR)
   - ticker: LNSTY
     name: London Stock Exchange Group (ADR)
 
   # ==========================================
-  # GIAPPONE (JP)
+  # GIAPPONE (6)
   # ==========================================
   - ticker: TM
     name: Toyota Motor
@@ -324,18 +235,6 @@ watchlist:
   - ticker: MUFG
     name: Mitsubishi UFJ Financial
     cik: "0001252838"
-  - ticker: SMFG
-    name: Sumitomo Mitsui Financial
-    cik: "0001504037"
-  - ticker: SFTBY
-    name: SoftBank Group (ADR)
-  # --- Nuove Aggiunte Giappone ---
-  - ticker: KEYN
-    name: Keyence (ADR)
-  - ticker: MSBHY
-    name: Mitsubishi Corp (ADR)
-  - ticker: MITUY
-    name: Mitsui & Co. (ADR)
   - ticker: HTHIY
     name: Hitachi (ADR)
   - ticker: HOCPY
@@ -344,14 +243,10 @@ watchlist:
     name: Disco Corp (ADR)
 
   # ==========================================
-  # CINA / HONG KONG (CN / HK)
-  # Suffissi Yahoo: .SS Shanghai, .SZ Shenzhen, .HK Hong Kong
-  # ADR USA: liquidi nelle ore USA (più utili per alert GHA)
+  # CINA / HONG KONG (12) — preferenza ADR/HK liquidi + crescita
   # ==========================================
   - ticker: 0700.HK
     name: Tencent Holdings
-  - ticker: 9988.HK
-    name: Alibaba Group (HK)
   - ticker: 3690.HK
     name: Meituan
   - ticker: 1810.HK
@@ -368,34 +263,19 @@ watchlist:
   - ticker: PDD
     name: PDD Holdings (ADR)
     cik: "0001737806"
-  - ticker: BIDU
-    name: Baidu (ADR)
-    cik: "0001329099"
   - ticker: JD
     name: JD.com (ADR)
     cik: "0001549802"
-  # --- Nuove Aggiunte Cina / Hong Kong ---
-  - ticker: 1211.HK
-    name: BYD Company (HK)
-  - ticker: 2318.HK
-    name: Ping An Insurance
-  - ticker: 0941.HK
-    name: China Mobile
-  - ticker: 0883.HK
-    name: CNOOC Limited
   - ticker: NTES
     name: NetEase (ADR)
     cik: "0001110649"
-  - ticker: LI
-    name: Li Auto (ADR)
-    cik: "0001791706"
+  - ticker: 2318.HK
+    name: Ping An Insurance
   - ticker: 0981.HK
     name: SMIC
 
   # ==========================================
-  # COREA DEL SUD (KR) — KRX / KOSDAQ
-  # Suffissi Yahoo: .KS KOSPI, .KQ KOSDAQ
-  # Filings: OpenDART (OPEN_DART_API_KEY)
+  # COREA DEL SUD (10)
   # ==========================================
   - ticker: 005930.KS
     name: Samsung Electronics
@@ -403,13 +283,10 @@ watchlist:
     name: SK hynix
   - ticker: 035420.KS
     name: NAVER
-  - ticker: 035720.KS
-    name: Kakao
   - ticker: 051910.KS
     name: LG Chem
   - ticker: 006400.KS
     name: Samsung SDI
-  # --- Nuove Aggiunte Corea del Sud ---
   - ticker: 005380.KS
     name: Hyundai Motor
   - ticker: 000270.KS
@@ -418,10 +295,6 @@ watchlist:
     name: Samsung Biologics
   - ticker: 068270.KS
     name: Celltrion
-  - ticker: 005490.KS
-    name: POSCO Holdings
-  - ticker: 012330.KS
-    name: Hyundai Mobis
 
 rules:
   only_upside: true
@@ -550,29 +423,29 @@ rules:
 
 clusters:
   - name: semis
-    tickers: [NVDA, AVGO, AMD, SMCI, TSM, ASML, QCOM, AMAT, LRCX, TXN, STM, IFNNY, DSCSY, 0981.HK, 000660.KS, 005930.KS]
+    tickers: [NVDA, AVGO, AMD, TSM, ASML, QCOM, AMAT, LRCX, TXN, STM, IFNNY, DSCSY, 0981.HK, 000660.KS, 005930.KS]
   - name: megacap
     tickers: [AAPL, MSFT, GOOGL, AMZN, META, BRK.B, SAP, ORCL, CRM, NOW, ACN]
-  - name: high_beta
-    tickers: [PLTR, COIN, SOFI, MARA, HOOD, TSLA, MSTR, RIOT, PANW, CRWD]
+  - name: software_ai
+    tickers: [PLTR, NOW, CRM, ORCL, PANW, CRWD, MSFT, GOOGL]
   - name: energy
-    tickers: [XOM, SHEL, BP, ENI, TTE, SRG.MI, 0883.HK]
+    tickers: [XOM, SHEL, TTE]
   - name: finance
-    tickers: [JPM, V, MA, HSBC, MUFG, SMFG, UCG.MI, ISP.MI, ALIZY, G.MI, MB.MI, MURGY, AXAHY, 2318.HK, LNSTY]
+    tickers: [JPM, V, MA, MUFG, UCG.MI, ISP.MI, ALIZY, G.MI, 2318.HK, LNSTY]
   - name: pharma_health
-    tickers: [LLY, JNJ, UNH, AZN, GSK, SNY, ABBV, MRK, ISRG, BAYRY, 207940.KS, 068270.KS]
+    tickers: [LLY, UNH, AZN, SNY, ABBV, MRK, ISRG, 207940.KS, 068270.KS]
   - name: auto_industrial
-    tickers: [TSLA, RACE, STLA, TM, SIEGY, EADSY, MBGYY, BMWYY, LMT, RTX, CAT, DE, GE, LDO.MI, RNMBY, DHLGY, SAFRY, BAESY, 005380.KS, 000270.KS, 012330.KS]
+    tickers: [TSLA, RACE, TM, SIEGY, EADSY, LMT, RTX, CAT, DE, GE, LDO.MI, RNMBY, SAFRY, BAESY, 005380.KS, 000270.KS, 002594.SZ]
   - name: consumer_retail
-    tickers: [WMT, COST, PG, UL, LVMUY, LRLCY, MCD, PEP, KO, HD, MONC.MI, HESAY, DANOY, DEO, BTI]
+    tickers: [WMT, COST, LVMUY, LRLCY, MCD, HD, MONC.MI, HESAY, 600519.SS]
   - name: china_hk
-    tickers: [0700.HK, 9988.HK, 3690.HK, 1810.HK, BABA, PDD, BIDU, JD, 600519.SS, 300750.SZ, 002594.SZ, 1211.HK, 2318.HK, 0941.HK, 0883.HK, NTES, LI, 0981.HK]
+    tickers: [0700.HK, 3690.HK, 1810.HK, BABA, PDD, JD, 600519.SS, 300750.SZ, 002594.SZ, 2318.HK, NTES, 0981.HK]
   - name: korea
-    tickers: [005930.KS, 000660.KS, 035420.KS, 035720.KS, 051910.KS, 006400.KS, 005380.KS, 000270.KS, 207940.KS, 068270.KS, 005490.KS, 012330.KS]
+    tickers: [005930.KS, 000660.KS, 035420.KS, 051910.KS, 006400.KS, 005380.KS, 000270.KS, 207940.KS, 068270.KS]
   - name: asia_tech
-    tickers: [005930.KS, 000660.KS, 0700.HK, 9988.HK, TSM, SONY, SMCI, NVDA, KEYN, HOCPY, DSCSY]
-  - name: defensive_utilities
-    tickers: [ENEL.MI, TRN.MI, SRG.MI, NEE, 0941.HK]
+    tickers: [005930.KS, 000660.KS, 0700.HK, TSM, SONY, NVDA, HOCPY, DSCSY, 0981.HK, PDD]
+  - name: utilities_infra
+    tickers: [ENEL.MI, TRN.MI, NEE, VCISY, PRY.MI]
 
 edgar:
   enabled: true
