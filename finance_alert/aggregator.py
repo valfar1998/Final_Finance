@@ -7,18 +7,26 @@ from datetime import datetime, timedelta, timezone
 from finance_alert.config import AppConfig
 from finance_alert.http import map_parallel
 from finance_alert.models import EarningsEvent, Filing, NewsItem, Quote
-from finance_alert.sources import benzinga, edgar, finnhub, fmp, marketaux, newsapi, polygon, twelve, wire_rss, yahoo
+from finance_alert.sources import benzinga, edgar, eodhd, finnhub, fmp, marketaux, newsapi, polygon, twelve, wire_rss, yahoo
 
 
 def source_status() -> dict[str, bool]:
     from finance_alert.news_llm import llm_available
     from finance_alert.state_store import redis_available
 
+    try:
+        from finance_alert.markets.asia import status as asia_status
+
+        asia = asia_status()
+    except Exception:
+        asia = {}
+
     return {
         "finnhub": finnhub.available(),
         "fmp": fmp.available(),
         "twelve_data": twelve.available(),
         "polygon": polygon.available(),
+        "eodhd": eodhd.available(),
         "benzinga": benzinga.available(),
         "newsapi": newsapi.available(),
         "marketaux": marketaux.available(),
@@ -28,6 +36,10 @@ def source_status() -> dict[str, bool]:
         "sec_edgar": True,
         "yahoo_rss": True,
         "wire_rss": wire_rss.available(),
+        "asia_akshare": bool(asia.get("akshare")),
+        "asia_tushare": bool(asia.get("tushare")),
+        "asia_fdr": bool(asia.get("finance_data_reader")),
+        "asia_pykrx": bool(asia.get("pykrx")),
     }
 
 
@@ -43,6 +55,9 @@ def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
         providers.append(("finnhub", finnhub.fetch_quotes))
     if polygon.available():
         providers.append(("polygon", polygon.fetch_quotes))
+    # EODHD: forte su CN/HK/KR (prima di Yahoo per Asia)
+    if eodhd.available():
+        providers.append(("eodhd", eodhd.fetch_quotes))
     providers.append(("yahoo", yahoo.fetch_quotes))
 
     missing = list(tickers)
@@ -54,10 +69,16 @@ def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
             if ticker not in merged:
                 merged[ticker] = quote
         missing = [t for t in tickers if t not in merged]
-    # Retry Finnhub per ticker persi per errori HTTP/parsing Yahoo
+    # Retry Finnhub / EODHD per ticker persi
     missing = [t for t in tickers if t not in merged]
     if missing and finnhub.available():
         fb = finnhub.fetch_quotes(missing)
+        for ticker, quote in fb.items():
+            if ticker not in merged:
+                merged[ticker] = quote
+    missing = [t for t in tickers if t not in merged]
+    if missing and eodhd.available():
+        fb = eodhd.fetch_quotes(missing)
         for ticker, quote in fb.items():
             if ticker not in merged:
                 merged[ticker] = quote

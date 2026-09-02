@@ -331,7 +331,7 @@ Router: `finance_alert/regulatory/hub.py` — rileva regione dal suffisso ticker
 | `.L` / `.IL` | UK FCA | REST API V0.1 |
 | `.T` / `.TO` | JP FSA | EDINET API v2 |
 | `.KS` / `.KQ` | KR FSS | **OpenDART** (`opendart.py`) |
-| `.SS` / `.SZ` / `.HK` | CN / HK | Prezzi Yahoo; filings locali via **AKShare** (opz. locale) |
+| `.SS` / `.SZ` / `.HK` | CN / HK | Quote **EODHD**/Yahoo; AKShare locale |
 | `.PA` | FR AMF | OpenDataSoft info-financiere |
 | `.DE` / `.F` | DE BaFin | scraping portale |
 | `.MI` | IT CONSOB | scraping elenchi pubblici |
@@ -345,7 +345,9 @@ Router: `finance_alert/regulatory/hub.py` — rileva regione dal suffisso ticker
 FCA_AUTH_EMAIL=...          # email registrata su register.fca.org.uk/Developer
 FCA_API_KEY=...
 FSA_EDINET_API_KEY=...      # disclosure2.edinet-fsa.go.jp
-OPEN_DART_API_KEY=...       # opendart.fss.or.kr (Corea)
+OPEN_DART_API_KEY=...       # opendart.fss.or.kr (Corea) — ok dopo approvazione
+EODHD_API_TOKEN=...         # eodhd.com — quote Asia/US (CI)
+TUSHARE_TOKEN=...           # tushare.pro — solo locale
 SEC_CONTACT_EMAIL=...
 ```
 
@@ -359,10 +361,13 @@ pip install -r requirements-asia.txt
 
 | Paese | Libreria / API | Uso |
 |-------|----------------|-----|
-| Cina | **AKShare** (gratis) / TuShare (freemium) | A-shares, indici, macro |
-| Corea | **FinanceDataReader**, **PyKRX** | storici KRX in DataFrame |
-| Corea | **OpenDART** | filings ufficiali (già nel core) |
-| Commerciali | EODHD, Alltick, IBKR | realtime / Stock Connect — fuori dal tier free |
+| Multi | **EODHD** (`EODHD_API_TOKEN`) | Quote realtime CN/HK/KR/US in CI |
+| Cina | **AKShare** (gratis) / **TuShare** (`TUSHARE_TOKEN`) | A-shares, indici, macro (locale) |
+| Corea | **FinanceDataReader**, **PyKRX** | storici KRX in DataFrame (locale) |
+| Corea | **OpenDART** | filings ufficiali (quando key approvata) |
+| Commerciali | Alltick, IBKR | realtime / Stock Connect — opzionali |
+
+EODHD è nel core (`sources/eodhd.py`). AKShare/TuShare/FDR/PyKRX: `finance_alert/markets/asia.py` + `requirements-asia.txt`.
 
 ---
 
@@ -579,6 +584,7 @@ Copertura: RVOL robusto, earnings gate on/off, regulatory region detect, unified
 
 | Data | Change |
 |------|--------|
+| 2026-09-02 | EODHD quote Asia + bridge AKShare/TuShare/FDR/PyKRX (`markets/asia.py`) |
 | 2026-09-02 | Cina + Corea: watchlist HK/A-shares/KRX, OpenDART, requirements-asia opzionale |
 | 2026-09-02 | Scan più lenti (20/10 min) + `max_scan_symbols` 100; watchlist multi-mercato ampliata |
 | 2026-09-02 | Scheduler primario → **GitHub Actions** (Modal disattivato) |

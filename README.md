@@ -105,7 +105,7 @@ Watchlist e soglie: `config/watchlist.yaml`.
    - `TELEGRAM_CHAT_ID`
    - `FINNHUB_API_KEY`
    - **consigliato:** `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (dedupe tra run CI)
-   - opzionali: `FMP_API_KEY`, `TWELVE_DATA_API_KEY`, `POLYGON_API_KEY`, `NEWSAPI_API_KEY`, `MARKETAUX_API_TOKEN`, `BENZINGA_API_TOKEN`, `GEMINI_API_KEY`, `NEWS_LLM_PROVIDER`, `SEC_CONTACT_EMAIL`, `FCA_*`, `FSA_EDINET_API_KEY`, `OPEN_DART_API_KEY`
+   - opzionali: `FMP_API_KEY`, `TWELVE_DATA_API_KEY`, `POLYGON_API_KEY`, `NEWSAPI_API_KEY`, `MARKETAUX_API_TOKEN`, `BENZINGA_API_TOKEN`, `GEMINI_API_KEY`, `NEWS_LLM_PROVIDER`, `SEC_CONTACT_EMAIL`, `FCA_*`, `FSA_EDINET_API_KEY`, `OPEN_DART_API_KEY`, `EODHD_API_TOKEN`, `TUSHARE_TOKEN`
 
 **Upstash Redis (dedupe):** [console.upstash.com](https://console.upstash.com) → Create database → tab REST → copia URL e token nei secrets. Senza Upstash, la dedupe usa solo cache file locale (ogni run GitHub Actions parte da zero).
 

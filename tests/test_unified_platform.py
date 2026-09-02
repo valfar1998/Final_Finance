@@ -23,6 +23,25 @@ def test_detect_region_suffixes():
     assert detect_region("0700.HK") == "HK"
 
 
+def test_eodhd_symbol_mapping():
+    from finance_alert.sources.eodhd import to_eodhd_symbol
+
+    assert to_eodhd_symbol("AAPL") == "AAPL.US"
+    assert to_eodhd_symbol("600519.SS") == "600519.SH"
+    assert to_eodhd_symbol("005930.KS") == "005930.KS"
+    assert to_eodhd_symbol("0700.HK") == "0700.HK"
+
+
+def test_asia_status_without_libs():
+    from finance_alert.markets.asia import status
+
+    st = status()
+    assert "akshare" in st
+    assert "pykrx" in st
+    assert "finance_data_reader" in st
+    assert "tushare" in st
+
+
 def test_opendart_normalize_and_missing_key():
     from finance_alert.regulatory.opendart import _normalize_kr_ticker, filings_for_ticker
 
