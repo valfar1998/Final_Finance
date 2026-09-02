@@ -13,7 +13,7 @@ from finance_alert.regulatory.esma import check_entity as esma_check
 from finance_alert.regulatory.fca import search_firm as fca_search
 from finance_alert.regulatory.fsa_edinet import filings_for_ticker as edinet_filings
 
-# Suffissi Yahoo → giurisdizione primaria
+# Suffissi Yahoo → giurisdizione primaria (espanso multi-mercato)
 _SUFFIX_REGION = {
     ".L": "UK",
     ".IL": "UK",
@@ -23,6 +23,32 @@ _SUFFIX_REGION = {
     ".MI": "IT",
     ".T": "JP",
     ".TO": "JP",
+    ".SW": "CH",
+    ".AS": "NL",
+    ".MC": "ES",
+    ".SA": "BR",
+    ".MX": "MX",
+    ".HK": "HK",
+    ".AX": "AU",
+    ".NZ": "NZ",
+    ".KS": "KR",
+    ".KQ": "KR",
+    ".SS": "CN",
+    ".SZ": "CN",
+    ".NS": "IN",
+    ".BO": "IN",
+    ".SI": "SG",
+    ".ST": "SE",
+    ".OL": "NO",
+    ".CO": "DK",
+    ".HE": "FI",
+    ".VI": "AT",
+    ".WA": "PL",
+    ".BK": "TH",
+    ".TW": "TW",
+    ".TA": "IL",
+    ".JO": "ZA",
+    ".ME": "RU",
 }
 
 
@@ -97,8 +123,8 @@ def regulatory_check(ticker: str, company_name: str = "") -> RegulatoryProfile:
         if edinet.error:
             profile.flags.append(f"EDINET: {edinet.error[:60]}")
 
-    # ESMA copre UE — sempre utile per sanzioni cross-border
-    if region in {"FR", "DE", "IT", "UK"}:
+    # ESMA copre UE — utile per mercati europei + UK post-Brexit cross-listing
+    if region in {"FR", "DE", "IT", "UK", "CH", "NL", "ES", "SE", "NO", "DK", "FI", "AT", "PL"}:
         profile.sources_checked.append("ESMA")
         esma = esma_check(name)
         profile.details["esma"] = {

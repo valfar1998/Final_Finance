@@ -22,8 +22,12 @@ class UnifiedRules:
     enrich_telegram: bool = True
     quality_gate_block: bool = False  # if True, silences alerts below min score
     include_regulatory: bool = True
-    screener_min_score: float = 7.0  # unified score to enter dynamic watchlist
+    screener_min_score: float = 7.0  # unified score to enter dynamic watchlist DB
     screener_tickers: list[str] = field(default_factory=list)
+    use_dynamic_watchlist: bool = False  # merge ticker promossi da --screen
+    dynamic_min_score: float = 0.0
+    include_global_screener: bool = False  # merge screener_tickers nel scan alert
+    max_scan_symbols: int = 80  # cap per rate limit API (0 = illimitato)
 
 
 @dataclass
@@ -53,5 +57,9 @@ def load_unified_config(path: Path | None = None) -> UnifiedConfig:
         include_regulatory=bool(raw.get("include_regulatory", True)),
         screener_min_score=float(raw.get("screener_min_score") or 7.0),
         screener_tickers=[str(t).upper() for t in screener if str(t).strip()],
+        use_dynamic_watchlist=bool(raw.get("use_dynamic_watchlist", False)),
+        dynamic_min_score=float(raw.get("dynamic_min_score") or 0),
+        include_global_screener=bool(raw.get("include_global_screener", False)),
+        max_scan_symbols=int(raw.get("max_scan_symbols") or 80),
     )
     return UnifiedConfig(rules=rules)

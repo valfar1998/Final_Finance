@@ -63,6 +63,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           NEWS_LLM_PROVIDER: ${{ secrets.NEWS_LLM_PROVIDER }}
           SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
+          FCA_AUTH_EMAIL: ${{ secrets.FCA_AUTH_EMAIL }}
+          FCA_API_KEY: ${{ secrets.FCA_API_KEY }}
+          FSA_EDINET_API_KEY: ${{ secrets.FSA_EDINET_API_KEY }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           PYTHONUTF8: "1"

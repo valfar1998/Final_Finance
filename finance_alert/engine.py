@@ -32,6 +32,7 @@ from finance_alert.rvol_baseline import ensure_baseline
 from finance_alert.rules import build_alerts
 from finance_alert.sources import yahoo
 from finance_alert.state_store import load_sent_raw, save_sent_raw
+from finance_alert.watchlist_resolver import resolve_scan_symbols
 
 LAST = ROOT / "data" / "last_scan.json"
 
@@ -167,15 +168,22 @@ def _macro_quotes(cfg: AppConfig, base: dict) -> dict:
 
 
 def run_scan(cfg: AppConfig | None = None) -> ScanResult:
-    cfg = cfg or load_config()
+    base_cfg = cfg or load_config()
+    symbols, watchlist = resolve_scan_symbols(base_cfg)
+    cfg = AppConfig(
+        watchlist=watchlist,
+        rules=base_cfg.rules,
+        edgar=base_cfg.edgar,
+        clusters=base_cfg.clusters,
+    )
     now = _now_utc()
     sources = source_status()
 
-    ensure_baseline(cfg.symbols)
+    ensure_baseline(symbols)
     update_forwards(now)
 
     with ThreadPoolExecutor(max_workers=4) as pool:
-        f_quotes = pool.submit(fetch_quotes, cfg.symbols)
+        f_quotes = pool.submit(fetch_quotes, symbols)
         f_earn = pool.submit(fetch_earnings, cfg, now)
         f_news = pool.submit(fetch_news, cfg, now)
         f_filings = pool.submit(fetch_filings, cfg)
@@ -184,7 +192,7 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
         news = f_news.result()
         filings = f_filings.result()
 
-    quotes = overlay_extended_hours(quotes, cfg.symbols)
+    quotes = overlay_extended_hours(quotes, symbols)
     quotes = _macro_quotes(cfg, quotes)
     quotes = overlay_volume_stats(quotes)
 
