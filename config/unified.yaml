@@ -15,8 +15,8 @@ unified:
   # true = include ticker promossi da: python -m finance_alert --screen --update-watchlist
   use_dynamic_watchlist: true
   dynamic_min_score: 6.0
-  # Limite titoli per scan (rate limit Finnhub free ~60 req/min)
-  max_scan_symbols: 80
+  # Limite titoli per scan (scan più lenti → più headroom; Finnhub free ~60 req/min)
+  max_scan_symbols: 100
 
   # Universo multi-mercato (suffissi Yahoo). Aggiungi/rimuovi liberamente.
   screener_tickers:

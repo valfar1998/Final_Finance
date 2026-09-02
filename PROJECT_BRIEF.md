@@ -212,7 +212,7 @@ Cluster in YAML: `semis`, `megacap`, `high_beta`.
 
 | Canale | Frequenza | File |
 |--------|-----------|------|
-| **GitHub Actions** (primario) | 15 min baseline + 3 min finestre volatili | `.github/workflows/telegram-borsa-alerts.yml` |
+| **GitHub Actions** (primario) | 20 min baseline + 10 min open USA | `.github/workflows/telegram-borsa-alerts.yml` |
 | **Locale** | manuale | `python -m finance_alert` |
 | **Modal.com** (opzionale) | 60s finestre volatili; 15m baseline | `modal_app.py` — richiede carta dopo free tier |
 
@@ -563,6 +563,7 @@ Copertura: RVOL robusto, earnings gate on/off, regulatory region detect, unified
 
 | Data | Change |
 |------|--------|
+| 2026-09-02 | Scan più lenti (20/10 min) + `max_scan_symbols` 100; watchlist multi-mercato ampliata |
 | 2026-09-02 | Scheduler primario → **GitHub Actions** (Modal disattivato) |
 | 2026-09-02 | Filtri produzione: RVOL 3.0, LLM 6, earnings gate on; doc Upstash |
 | 2026-09-02 | Repo **Final_Finance**: unificazione 3 moduli + regulatory hub |

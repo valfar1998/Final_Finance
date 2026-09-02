@@ -2,7 +2,9 @@
 # Miglioramenti precisione: LLM news, RVOL, dedupe ibrido, 8-K 2.02/1.01/5.02/8.01.
 
 watchlist:
-  # Megacap
+  # ==========================================
+  # USA (Megacaps & High EBITDA Leaders)
+  # ==========================================
   - ticker: NVDA
     name: NVIDIA
     cik: "0001045810"
@@ -24,6 +26,39 @@ watchlist:
   - ticker: TSLA
     name: Tesla
     cik: "0001318605"
+  - ticker: BRK.B
+    name: Berkshire Hathaway
+    cik: "0001067983"
+  - ticker: LLY
+    name: Eli Lilly
+    cik: "0000059478"
+  - ticker: JPM
+    name: JPMorgan Chase
+    cik: "0000019617"
+  - ticker: XOM
+    name: ExxonMobil
+    cik: "0000034088"
+  - ticker: V
+    name: Visa
+    cik: "0001403161"
+  - ticker: MA
+    name: Mastercard
+    cik: "0001141391"
+  - ticker: JNJ
+    name: Johnson & Johnson
+    cik: "0000200406"
+  - ticker: PG
+    name: Procter & Gamble
+    cik: "0000080424"
+  - ticker: UNH
+    name: UnitedHealth Group
+    cik: "0000731766"
+  - ticker: COST
+    name: Costco
+    cik: "0000909832"
+  - ticker: WMT
+    name: Walmart
+    cik: "0000104169"
   - ticker: AMD
     name: AMD
     cik: "0000002488"
@@ -33,7 +68,8 @@ watchlist:
   - ticker: SMCI
     name: Super Micro
     cik: "0001375365"
-  # Mid-cap alto beta (inefficienza più lunga)
+
+  # USA (Mid-Cap / High Beta / Momentum)
   - ticker: PLTR
     name: Palantir
     cik: "0001321655"
@@ -49,17 +85,115 @@ watchlist:
   - ticker: HOOD
     name: Robinhood
     cik: "0001783879"
-  # Alta volatilità / volume (eventi statistici extra)
   - ticker: MSTR
     name: MicroStrategy
     cik: "0001050446"
   - ticker: RIOT
     name: Riot Platforms
     cik: "0001167419"
+
+  # ETF / Prodotti derivati
   - ticker: SOXL
     name: Direxion Semiconductors 3X
   - ticker: BITO
     name: ProShares Bitcoin Strategy ETF
+
+  # ==========================================
+  # ITALIA (ITA)
+  # ==========================================
+  - ticker: RACE
+    name: Ferrari
+    cik: "0001648416"
+  - ticker: STLA
+    name: Stellantis
+    cik: "0001605484"
+  - ticker: ENI
+    name: Eni
+    cik: "0001002242"
+  - ticker: ENEL.MI
+    name: Enel
+    cik: "0000892553"
+  - ticker: UCG.MI
+    name: UniCredit
+  - ticker: ISP.MI
+    name: Intesa Sanpaolo
+
+  # ==========================================
+  # GERMANIA (DE)
+  # ==========================================
+  - ticker: SAP
+    name: SAP SE
+    cik: "0001000180"
+  - ticker: SIEGY
+    name: Siemens (ADR)
+    cik: "0001140222"
+  - ticker: DTEGY
+    name: Deutsche Telekom (ADR)
+    cik: "0001002517"
+  - ticker: MBGYY
+    name: Mercedes-Benz Group (ADR)
+  - ticker: BMWYY
+    name: BMW (ADR)
+  - ticker: ALIZY
+    name: Allianz (ADR)
+
+  # ==========================================
+  # FRANCIA (FR)
+  # ==========================================
+  - ticker: TTE
+    name: TotalEnergies
+    cik: "0000879764"
+  - ticker: SNY
+    name: Sanofi
+    cik: "0001121404"
+  - ticker: LVMUY
+    name: LVMH (ADR)
+  - ticker: LRLCY
+    name: L'Oreal (ADR)
+  - ticker: EADSY
+    name: Airbus (ADR)
+  - ticker: SBGSY
+    name: Schneider Electric (ADR)
+
+  # ==========================================
+  # REGNO UNITO (UK)
+  # ==========================================
+  - ticker: SHEL
+    name: Shell
+    cik: "0001306965"
+  - ticker: AZN
+    name: AstraZeneca
+    cik: "0001071471"
+  - ticker: HSBC
+    name: HSBC Holdings
+    cik: "0001086380"
+  - ticker: UL
+    name: Unilever
+    cik: "0000037284"
+  - ticker: BP
+    name: BP plc
+    cik: "0000313807"
+  - ticker: GSK
+    name: GSK plc
+    cik: "0001135799"
+
+  # ==========================================
+  # GIAPPONE (JP)
+  # ==========================================
+  - ticker: TM
+    name: Toyota Motor
+    cik: "0001094517"
+  - ticker: SONY
+    name: Sony Group
+    cik: "0000313838"
+  - ticker: MUFG
+    name: Mitsubishi UFJ Financial
+    cik: "0001252838"
+  - ticker: SMFG
+    name: Sumitomo Mitsui Financial
+    cik: "0001504037"
+  - ticker: SFTBY
+    name: SoftBank Group (ADR)
 
 rules:
   only_upside: true
@@ -184,18 +318,27 @@ rules:
   spike_buckets: [8, 10, 15]
   momentum_pct: 99.0
   momentum_minutes: 30
-  # Utili (2.02), accordi (1.01), management (5.02), eventi societari (8.01)
   filing_items_only: ["2.02", "1.01", "5.02", "8.01"]
 
 clusters:
   - name: semis
     tickers: [NVDA, AVGO, AMD, SMCI]
   - name: megacap
-    tickers: [AAPL, MSFT, GOOGL, AMZN, META]
+    tickers: [AAPL, MSFT, GOOGL, AMZN, META, BRK.B, SAP]
   - name: high_beta
-    tickers: [PLTR, COIN, SOFI, MARA, HOOD, TSLA]
+    tickers: [PLTR, COIN, SOFI, MARA, HOOD, TSLA, MSTR, RIOT]
+  - name: energy
+    tickers: [XOM, SHEL, BP, ENI, TTE]
+  - name: finance
+    tickers: [JPM, V, MA, HSBC, MUFG, SMFG, UCG.MI, ISP.MI, ALIZY]
+  - name: pharma_health
+    tickers: [LLY, JNJ, UNH, AZN, GSK, SNY]
+  - name: auto_industrial
+    tickers: [TSLA, RACE, STLA, TM, SIEGY, EADSY, MBGYY, BMWYY]
+  - name: consumer_retail
+    tickers: [WMT, COST, PG, UL, LVMUY, LRLCY]
 
 edgar:
   enabled: true
-  forms: ["8-K", "8-K/A"]
+  forms: ["8-K", "8-K/A", "6-K"]
   max_age_hours: 18

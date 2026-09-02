@@ -2,13 +2,13 @@ name: Telegram borsa alerts
 
 on:
   schedule:
-    # Lun–ven: premarket USA → after-hours (baseline)
-    - cron: "*/15 8-23 * * 1-5"
-    # Finestre ad alta volatilità CET: 14:00–15:30 e 22:00–22:30 → scan ogni 3 min
-    - cron: "*/3 12-13 * * 1-5"
-    - cron: "0,3,6,9,12,15,18,21,24,27,30 20 * * 1-5"
-    # Sab–dom: ogni 2 ore (08–22 UTC) per news / filing
-    - cron: "0 8,10,12,14,16,18,20,22 * * 0,6"
+    # Swing ~7g: ritardo 10–20 min irrilevante → meno scan, più titoli monitorati
+    # Lun–ven: premarket USA → after-hours, ogni 20 min
+    - cron: "0,20,40 8-23 * * 1-5"
+    # Open USA (~14–16 CET): ogni 10 min (leggermente più frequente)
+    - cron: "0,10,20,30,40,50 12-13 * * 1-5"
+    # Sab–dom: ogni 3 ore (news / filing)
+    - cron: "0 8,11,14,17,20 * * 0,6"
     # Digest pre-apertura USA (~07:30 ET)
     - cron: "30 11 * * 1-5"
   workflow_dispatch:
@@ -25,7 +25,7 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
 

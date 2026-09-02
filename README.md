@@ -109,7 +109,7 @@ Watchlist e soglie: `config/watchlist.yaml`.
 
 **Upstash Redis (dedupe):** [console.upstash.com](https://console.upstash.com) → Create database → tab REST → copia URL e token nei secrets. Senza Upstash, la dedupe usa solo cache file locale (ogni run GitHub Actions parte da zero).
 
-2. Workflow `Telegram borsa alerts`: ogni 15 min **pre-market → after-hours USA** (08–23 UTC, lun–ven) + digest pre-open
+2. Workflow `Telegram borsa alerts`: ogni **20 min** pre-market → after-hours USA (08–23 UTC, lun–ven), ogni **10 min** all’open USA, + digest pre-open
 3. Dopo il primo push: Actions → workflow → **Run workflow** (test = true) per verificare Telegram
 
 Cron locale (alternativa):
