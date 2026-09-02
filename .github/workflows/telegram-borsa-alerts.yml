@@ -44,6 +44,7 @@ jobs:
           path: |
             data/telegram_alerts_sent.json
             data/rvol_baseline.json
+            data/performance_tracker.json
           key: telegram-borsa-state-${{ github.run_id }}
           restore-keys: |
             telegram-borsa-state-
@@ -92,7 +93,7 @@ jobs:
           fi
 
       - uses: actions/cache/save@v4
-        if: always() && (hashFiles('data/telegram_alerts_sent.json') != '' || hashFiles('data/rvol_baseline.json') != '')
+        if: always() && (hashFiles('data/telegram_alerts_sent.json') != '' || hashFiles('data/rvol_baseline.json') != '' || hashFiles('data/performance_tracker.json') != '')
         with:
           path: |
             data/telegram_alerts_sent.json

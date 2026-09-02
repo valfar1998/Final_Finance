@@ -1,4 +1,8 @@
-"""Esecuzione serverless su Modal.com (scan ogni 60s nelle finestre volatili)."""
+"""Esecuzione serverless su Modal.com (opzionale — non usato in produzione).
+
+GitHub Actions è lo scheduler primario. Usa Modal solo se serve scan ogni 60s
+nelle finestre volatili e accetti il costo dopo il free tier.
+"""
 
 from __future__ import annotations
 

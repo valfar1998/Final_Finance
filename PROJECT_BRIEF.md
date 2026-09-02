@@ -29,8 +29,8 @@ Final_Finance/
 ├── README.md                     ← quick start
 ├── .env.example                  ← secrets FINANCE NOTIFY
 ├── requirements.txt              ← Python core (notify + unified)
-├── requirements-modal.txt        ← deploy Modal.com
-├── modal_app.py                  ← scheduler serverless primario
+├── requirements-modal.txt        ← deploy Modal.com (opzionale, non usato in prod)
+├── modal_app.py                  ← scheduler Modal legacy (opzionale)
 ├── app.py                        ← Streamlit dashboard alert
 │
 ├── config/
@@ -77,7 +77,7 @@ Final_Finance/
 │   ├── rvol_baseline.json
 │   └── performance_tracker.json
 │
-└── .github/workflows/            ← GitHub Actions backup scheduler
+└── .github/workflows/            ← GitHub Actions scheduler primario
     ├── telegram-borsa-alerts.yml
     └── keepalive.yml
 ```
@@ -95,7 +95,7 @@ Final_Finance/
                                         │
     ┌───────────────────────────────────┼───────────────────────────────────┐
     │                    FINANCE NOTIFY (scheduler)                         │
-    │  Modal.com 60s  │  GitHub Actions 15m  │  python -m finance_alert    │
+    │  GitHub Actions 15m/3m  │  python -m finance_alert (locale)           │
     └───────────────────────────────────┬───────────────────────────────────┘
                                         │
                     engine.run_scan()
@@ -166,11 +166,11 @@ Ogni alert potenziale passa **tutti** i filtri attivi. Se uno fallisce → silen
 | Dollar volume AH | `rules.volume.min_dollar_volume` | $250k |
 | Dollar volume high-beta | `min_dollar_volume_high_beta` | $500k |
 | Earnings gate 72h | `rules.earnings_gate_enabled` | **true** |
-| News wire obbligatorio | `rules.news_require_wire` | true | true |
-| News min score | `rules.news_min_score` | 7 | 6–7 |
-| Macro stress | SPY/QQQ ≤ −1.5% → min setup 8 | attivo | attivo |
-| Cap gap ATR | \|ΔP\| ≥ 1.5×ATR → scarta | attivo | attivo |
-| Halt/LULD | `quote.halted` → scarta | attivo | attivo |
+| News wire obbligatorio | `rules.news_require_wire` | true |
+| News min score | `rules.news_min_score` | 7 |
+| Macro stress | SPY/QQQ ≤ −1.5% → min setup 8 | attivo |
+| Cap gap ATR | \|ΔP\| ≥ 1.5×ATR → scarta | attivo |
+| Halt/LULD | `quote.halted` → scarta | attivo |
 
 **Earnings gate:** se `earnings_gate_enabled: true` e utili entro 72h → `setup_score = 0`, alert scartato con tag `[RISK: Earnings in < 72h]`.
 
@@ -212,11 +212,13 @@ Cluster in YAML: `semis`, `megacap`, `high_beta`.
 
 | Canale | Frequenza | File |
 |--------|-----------|------|
-| **Modal.com** (primario) | 60s finestre volatili; 15m baseline | `modal_app.py` |
-| **GitHub Actions** (backup) | 15 min + 3 min | `.github/workflows/telegram-borsa-alerts.yml` |
+| **GitHub Actions** (primario) | 15 min baseline + 3 min finestre volatili | `.github/workflows/telegram-borsa-alerts.yml` |
 | **Locale** | manuale | `python -m finance_alert` |
+| **Modal.com** (opzionale) | 60s finestre volatili; 15m baseline | `modal_app.py` — richiede carta dopo free tier |
 
-Deploy Modal:
+**Dedupe tra run GHA:** configurare `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` nei secrets GitHub. Senza Upstash, fallback su cache file (`data/telegram_alerts_sent.json`) ripristinata a ogni run.
+
+Deploy Modal (solo se serve latenza 60s e accetti costo ~$1/mese):
 
 ```powershell
 pip install -r requirements-modal.txt
@@ -486,7 +488,6 @@ python -m finance_alert --analyze NVDA    # score unificato
 python -m finance_alert --regulatory SAP.DE
 python -m finance_alert --screen --update-watchlist
 streamlit run app.py
-modal deploy modal_app.py
 pytest tests/
 ```
 
@@ -514,9 +515,9 @@ python scripts/scan_portfolio_alerts.py
 Checklist in ordine:
 
 1. **`python -m finance_alert --dry-run`** — legge log: quale filtro scarta?
-2. **Secrets Modal/GitHub** — `TELEGRAM_BOT_TOKEN`, `FINNHUB_API_KEY` associati?
-3. **Watchlist** — solo 19 ticker; giornate senza catalizzatori = 0 alert normale
-4. **Filtri** — RVOL/LLM/$ volume/earnings gate; in debug sono già rilassati in YAML
+2. **Secrets GitHub** — `TELEGRAM_BOT_TOKEN`, `FINNHUB_API_KEY` (e opz. Upstash) configurati?
+3. **Watchlist** — 19 ticker + screener globale; giornate senza catalizzatori = 0 alert normale
+4. **Filtri produzione** — RVOL 3.0, LLM 6, earnings gate on; abbassare temporaneamente in YAML solo per test
 5. **Macro stress** — mercato −1.5% → soglia setup 8/10
 6. **Dedupe** — stesso ticker entro 2h silenziato
 
@@ -539,8 +540,8 @@ Copertura: RVOL robusto, earnings gate on/off, regulatory region detect, unified
 | Servizio | Costo |
 |----------|-------|
 | Finnhub free | 60 req/min |
-| Modal.com | ~$30/mese crediti free |
-| GitHub Actions | free public repo |
+| GitHub Actions | free public repo (scheduler primario) |
+| Modal.com | opzionale (~$1/mese dopo free tier) |
 | Telegram Bot API | gratis |
 | Groq/Gemini Flash | free tier |
 | SEC/AMF/ESMA/… | gratis |
@@ -562,9 +563,11 @@ Copertura: RVOL robusto, earnings gate on/off, regulatory region detect, unified
 
 | Data | Change |
 |------|--------|
+| 2026-09-02 | Scheduler primario → **GitHub Actions** (Modal disattivato) |
+| 2026-09-02 | Filtri produzione: RVOL 3.0, LLM 6, earnings gate on; doc Upstash |
 | 2026-09-02 | Repo **Final_Finance**: unificazione 3 moduli + regulatory hub |
 | 2026-09-02 | Quant Platform: enrich Telegram, unified score, SQLite |
-| 2026-09-02 | Debug: RVOL 1.5, LLM 4, earnings gate off, +MSTR/RIOT/SOXL/BITO |
+| 2026-09-02 | Watchlist estesa: +MSTR/RIOT/SOXL/BITO + screener multi-mercato |
 | 2026-09-02 | stock_analysis: auto_analyze, portfolio DB, Telegram score alerts |
 | 2026-09-02 | finance_analyzer: portfolio API, scan_portfolio_alerts |
 | 2026-09-01 | FINANCE NOTIFY: Modal, RVOL robusto, performance tracker |

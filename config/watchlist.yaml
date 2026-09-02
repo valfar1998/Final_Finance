@@ -49,7 +49,7 @@ watchlist:
   - ticker: HOOD
     name: Robinhood
     cik: "0001783879"
-  # Alta volatilità / volume (debug — più eventi statistici)
+  # Alta volatilità / volume (eventi statistici extra)
   - ticker: MSTR
     name: MicroStrategy
     cik: "0001050446"
