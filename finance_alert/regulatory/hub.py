@@ -12,6 +12,7 @@ from finance_alert.regulatory.consob import check_company as consob_check
 from finance_alert.regulatory.esma import check_entity as esma_check
 from finance_alert.regulatory.fca import search_firm as fca_search
 from finance_alert.regulatory.fsa_edinet import filings_for_ticker as edinet_filings
+from finance_alert.regulatory.opendart import filings_for_ticker as opendart_filings
 
 # Suffissi Yahoo → giurisdizione primaria (espanso multi-mercato)
 _SUFFIX_REGION = {
@@ -122,6 +123,27 @@ def regulatory_check(ticker: str, company_name: str = "") -> RegulatoryProfile:
         profile.details["edinet"] = {"filings": len(edinet.filings), "error": edinet.error}
         if edinet.error:
             profile.flags.append(f"EDINET: {edinet.error[:60]}")
+
+    if region == "KR":
+        profile.sources_checked.append("OpenDART")
+        dart = opendart_filings(ticker)
+        profile.details["opendart"] = {
+            "disclosures": len(dart.disclosures),
+            "corp_code": dart.corp_code,
+            "error": dart.error,
+        }
+        if dart.error:
+            profile.flags.append(f"OpenDART: {dart.error[:60]}")
+        elif dart.disclosures:
+            profile.flags.append(f"OpenDART disclosure recenti ({len(dart.disclosures)})")
+
+    if region in {"CN", "HK"}:
+        # Nessuna API governativa REST gratuita tipo EDGAR/OpenDART nel hub;
+        # prezzi via Yahoo (.SS/.SZ/.HK); in locale opzionale AKShare.
+        profile.sources_checked.append("CN/HK-Yahoo")
+        profile.details["asia"] = {
+            "note": "Prezzi Yahoo; filings CN locali via AKShare (opzionale in locale)",
+        }
 
     # ESMA copre UE — utile per mercati europei + UK post-Brexit cross-listing
     if region in {"FR", "DE", "IT", "UK", "CH", "NL", "ES", "SE", "NO", "DK", "FI", "AT", "PL"}:

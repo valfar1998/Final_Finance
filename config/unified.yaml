@@ -37,13 +37,25 @@ unified:
     # UK
     - VOD.L
     - HSBA.L
-    # Asia-Pacifico
+    # Asia-Pacifico (JP / IN / TW)
     - 7203.T
     - 9984.T
-    - BABA
     - TSM
-    - 0700.HK
     - RELIANCE.NS
+    # Cina / Hong Kong (oltre a watchlist.yaml)
+    - 0700.HK
+    - 9988.HK
+    - 3690.HK
+    - 600519.SS
+    - 300750.SZ
+    - 002594.SZ
+    - BABA
+    - PDD
+    # Corea del Sud (KRX)
+    - 005930.KS
+    - 000660.KS
+    - 035420.KS
+    - 051910.KS
     # Americas ex-US
     - VALE
     - PBR
@@ -52,6 +64,9 @@ regulatory:
   fca:
     enabled: true
   fsa_edinet:
+    enabled: true
+    lookback_days: 14
+  opendart:
     enabled: true
     lookback_days: 14
   amf:

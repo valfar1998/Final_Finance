@@ -195,6 +195,56 @@ watchlist:
   - ticker: SFTBY
     name: SoftBank Group (ADR)
 
+  # ==========================================
+  # CINA / HONG KONG (CN / HK)
+  # Suffissi Yahoo: .SS Shanghai, .SZ Shenzhen, .HK Hong Kong
+  # ADR USA: liquidi nelle ore USA (più utili per alert GHA)
+  # ==========================================
+  - ticker: 0700.HK
+    name: Tencent Holdings
+  - ticker: 9988.HK
+    name: Alibaba Group (HK)
+  - ticker: 3690.HK
+    name: Meituan
+  - ticker: 1810.HK
+    name: Xiaomi
+  - ticker: 600519.SS
+    name: Kweichow Moutai
+  - ticker: 300750.SZ
+    name: CATL
+  - ticker: 002594.SZ
+    name: BYD
+  - ticker: BABA
+    name: Alibaba (ADR)
+    cik: "0001577552"
+  - ticker: PDD
+    name: PDD Holdings (ADR)
+    cik: "0001737806"
+  - ticker: BIDU
+    name: Baidu (ADR)
+    cik: "0001329099"
+  - ticker: JD
+    name: JD.com (ADR)
+    cik: "0001549802"
+
+  # ==========================================
+  # COREA DEL SUD (KR) — KRX / KOSDAQ
+  # Suffissi Yahoo: .KS KOSPI, .KQ KOSDAQ
+  # Filings: OpenDART (OPEN_DART_API_KEY)
+  # ==========================================
+  - ticker: 005930.KS
+    name: Samsung Electronics
+  - ticker: 000660.KS
+    name: SK hynix
+  - ticker: 035420.KS
+    name: NAVER
+  - ticker: 035720.KS
+    name: Kakao
+  - ticker: 051910.KS
+    name: LG Chem
+  - ticker: 006400.KS
+    name: Samsung SDI
+
 rules:
   only_upside: true
   peer_resistance: true
@@ -337,6 +387,12 @@ clusters:
     tickers: [TSLA, RACE, STLA, TM, SIEGY, EADSY, MBGYY, BMWYY]
   - name: consumer_retail
     tickers: [WMT, COST, PG, UL, LVMUY, LRLCY]
+  - name: china_hk
+    tickers: [0700.HK, 9988.HK, 3690.HK, 1810.HK, BABA, PDD, BIDU, JD, 600519.SS, 300750.SZ, 002594.SZ]
+  - name: korea
+    tickers: [005930.KS, 000660.KS, 035420.KS, 035720.KS, 051910.KS, 006400.KS]
+  - name: asia_tech
+    tickers: [005930.KS, 000660.KS, 0700.HK, 9988.HK, TSM, SONY, SMCI, NVDA]
 
 edgar:
   enabled: true

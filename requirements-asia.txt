@@ -1,0 +1,10 @@
+# Opzionale — solo analisi locale Asia (non richiesto da GitHub Actions).
+# pip install -r requirements-asia.txt
+#
+# Cina: AKShare (gratis, aggrega A-shares / macro). TuShare = freemium a crediti.
+# Corea: FinanceDataReader (storici KRX), PyKRX (portale ufficiale KRX).
+# Filings Corea: OpenDART REST (OPEN_DART_API_KEY) — già nel core, senza queste lib.
+
+akshare>=1.14.0
+FinanceDataReader>=0.9.50
+pykrx>=1.0.45
