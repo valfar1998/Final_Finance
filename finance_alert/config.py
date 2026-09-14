@@ -77,6 +77,35 @@ class SwingRules:
 
 
 @dataclass
+class PremarketRules:
+    """Universo dinamico gratis: Yahoo screener + Polygon prev-day (no snapshot live)."""
+
+    enabled: bool = False
+    max_extra: int = 30
+    yahoo_enabled: bool = True
+    yahoo_screens: list[str] = field(
+        default_factory=lambda: ["day_gainers", "most_actives", "small_cap_gainers"]
+    )
+    yahoo_count_per_screen: int = 25
+    polygon_enabled: bool = True
+    polygon_min_pct: float = 5.0
+    polygon_min_volume: float = 1_000_000.0
+    polygon_min_price: float = 2.0
+    upside_only: bool = True
+
+
+@dataclass
+class TrUniverseRules:
+    """Azioni USA listate su Trade Republic → news wire su tutto l'universo."""
+
+    enabled: bool = True
+    wire_match: bool = True
+    fetch_quotes_for_hits: bool = True
+    max_quote_hits: int = 40
+    min_name_len: int = 5
+
+
+@dataclass
 class Rules:
     spike_pct: float = 3.0
     spike_buckets: list[float] = field(default_factory=lambda: [3, 5, 7, 10, 15])
@@ -108,6 +137,8 @@ class Rules:
     peer_resistance: bool = True
     macro: MacroRules = field(default_factory=MacroRules)
     earnings_gate_enabled: bool = True
+    premarket: PremarketRules = field(default_factory=PremarketRules)
+    tr_universe: TrUniverseRules = field(default_factory=TrUniverseRules)
 
 
 @dataclass
@@ -224,6 +255,38 @@ def _swing_rules(raw: Any) -> SwingRules:
     )
 
 
+def _premarket_rules(raw: Any) -> PremarketRules:
+    data = raw if isinstance(raw, dict) else {}
+    screens = data.get("yahoo_screens") or [
+        "day_gainers",
+        "most_actives",
+        "small_cap_gainers",
+    ]
+    return PremarketRules(
+        enabled=bool(data.get("enabled", False)),
+        max_extra=int(data.get("max_extra") or 30),
+        yahoo_enabled=bool(data.get("yahoo_enabled", True)),
+        yahoo_screens=[str(x).strip() for x in screens if str(x).strip()],
+        yahoo_count_per_screen=int(data.get("yahoo_count_per_screen") or 25),
+        polygon_enabled=bool(data.get("polygon_enabled", True)),
+        polygon_min_pct=float(data.get("polygon_min_pct") or 5.0),
+        polygon_min_volume=float(data.get("polygon_min_volume") or 1_000_000),
+        polygon_min_price=float(data.get("polygon_min_price") or 2.0),
+        upside_only=bool(data.get("upside_only", True)),
+    )
+
+
+def _tr_universe_rules(raw: Any) -> TrUniverseRules:
+    data = raw if isinstance(raw, dict) else {}
+    return TrUniverseRules(
+        enabled=bool(data.get("enabled", True)),
+        wire_match=bool(data.get("wire_match", True)),
+        fetch_quotes_for_hits=bool(data.get("fetch_quotes_for_hits", True)),
+        max_quote_hits=int(data.get("max_quote_hits") or 40),
+        min_name_len=int(data.get("min_name_len") or 5),
+    )
+
+
 def _str_list(raw: Any) -> list[str]:
     if not isinstance(raw, list):
         return []
@@ -287,6 +350,8 @@ def load_config(path: Path | None = None) -> AppConfig:
         peer_resistance=bool(raw_rules.get("peer_resistance", True)),
         macro=_macro_rules(raw_rules.get("macro"), swing),
         earnings_gate_enabled=bool(raw_rules.get("earnings_gate_enabled", True)),
+        premarket=_premarket_rules(raw_rules.get("premarket")),
+        tr_universe=_tr_universe_rules(raw_rules.get("tr_universe")),
     )
     raw_edgar = data.get("edgar") or {}
     edgar = EdgarConfig(

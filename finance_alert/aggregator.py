@@ -8,6 +8,7 @@ from finance_alert.config import AppConfig
 from finance_alert.http import map_parallel
 from finance_alert.models import EarningsEvent, Filing, NewsItem, Quote
 from finance_alert.sources import benzinga, edgar, eodhd, finnhub, fmp, marketaux, newsapi, polygon, twelve, wire_rss, yahoo
+from finance_alert import tr_universe as tr_us
 
 
 def source_status() -> dict[str, bool]:
@@ -26,6 +27,8 @@ def source_status() -> dict[str, bool]:
         "fmp": fmp.available(),
         "twelve_data": twelve.available(),
         "polygon": polygon.available(),
+        "polygon_snapshot": polygon.snapshot_available(),
+        "yahoo_screener": True,
         "eodhd": eodhd.available(),
         "benzinga": benzinga.available(),
         "newsapi": newsapi.available(),
@@ -36,6 +39,7 @@ def source_status() -> dict[str, bool]:
         "sec_edgar": True,
         "yahoo_rss": True,
         "wire_rss": wire_rss.available(),
+        "tr_us_universe": bool(tr_us.load_equity_universe()),
         "asia_akshare": bool(asia.get("akshare")),
         "asia_tushare": bool(asia.get("tushare")),
         "asia_fdr": bool(asia.get("finance_data_reader")),
@@ -190,7 +194,8 @@ def fetch_news(cfg: AppConfig, now: datetime) -> list[NewsItem]:
     today = now.date()
     frm = (today - timedelta(days=1)).isoformat()
     to = today.isoformat()
-    items: list[NewsItem] = list(wire_rss.fetch_news(cfg.watchlist))
+    use_tr = bool(cfg.rules.tr_universe.enabled and cfg.rules.tr_universe.wire_match)
+    items: list[NewsItem] = list(wire_rss.fetch_news(cfg.watchlist, use_tr_universe=use_tr))
     jobs = [(ticker, frm, to) for ticker in cfg.symbols]
     batches = map_parallel(_news_for_ticker, jobs, max_workers=min(6, max(1, len(jobs))))
     for batch in batches:

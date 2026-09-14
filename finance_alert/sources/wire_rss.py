@@ -1,4 +1,4 @@
-"""Feed RSS wire gratuiti: PR Newswire, GlobeNewswire (nessuna API key)."""
+"""Feed RSS wire gratuiti: PR Newswire, GlobeNewswire (+ match universo Trade Republic US)."""
 
 from __future__ import annotations
 
@@ -92,6 +92,7 @@ def _parse_feed_xml(xml: str) -> list[dict[str, str | datetime | None]]:
 
 
 def _load_feed(publisher: str, url: str, referer: str) -> list[dict[str, str | datetime | None]]:
+    del publisher  # usato solo dal caller per NewsItem.publisher
     now = time.time()
     hit = _feed_cache.get(url)
     if hit and now - hit[0] < _FEED_TTL_SEC:
@@ -115,11 +116,29 @@ def _match_ticker(text: str, watchlist: list[Ticker]) -> str | None:
     return None
 
 
-def fetch_news(watchlist: list[Ticker]) -> list[NewsItem]:
-    """Scarica feed wire e filtra per ticker/nome in watchlist."""
-    if not watchlist:
-        return []
-    wanted = {t.ticker for t in watchlist}
+def _match_tr_universe(headline: str) -> str | None:
+    """Ticker Yahoo se la headline matcha un'azione USA su Trade Republic."""
+    from finance_alert.tr_universe import get_matcher, resolve_ticker
+
+    matcher = get_matcher()
+    if matcher is None:
+        return None
+    inst = matcher.match(headline)
+    if inst is None:
+        return None
+    tick = (inst.ticker or "").strip().upper()
+    if not tick:
+        tick = (resolve_ticker(inst.isin) or "").strip().upper()
+    return tick or None
+
+
+def fetch_news(watchlist: list[Ticker], *, use_tr_universe: bool = True) -> list[NewsItem]:
+    """
+    Scarica feed wire e filtra per watchlist e/o universo Trade Republic US.
+
+    Con use_tr_universe=True (default) le breaking news su titoli TR-US
+    generano item anche fuori dalla watchlist fissa — utili per comprare lo stesso giorno.
+    """
     items: list[NewsItem] = []
     seen: set[str] = set()
 
@@ -130,8 +149,10 @@ def fetch_news(watchlist: list[Ticker]) -> list[NewsItem]:
             key = (link or headline).strip().lower()
             if not headline or not key or key in seen:
                 continue
-            ticker = _match_ticker(headline, watchlist)
-            if ticker is None or ticker not in wanted:
+            ticker = _match_ticker(headline, watchlist) if watchlist else None
+            if ticker is None and use_tr_universe:
+                ticker = _match_tr_universe(headline)
+            if ticker is None:
                 continue
             seen.add(key)
             items.append(

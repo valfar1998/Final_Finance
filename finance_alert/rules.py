@@ -501,6 +501,19 @@ def build_alerts(
         alert_tags: list[str] = []
         if scored.llm_unverified:
             alert_tags.append("LLM Unverified")
+        quote = quotes.get(scored.ticker.upper())
+        price_line = ""
+        if quote is not None:
+            pct = quote.pct_from_close()
+            px = f"{quote.price:.2f}" if quote.price is not None else "n/d"
+            if pct is not None:
+                price_line = f"Prezzo {px} ({pct:+.1f}% vs close) · sessione {quote.session}\n"
+            else:
+                price_line = f"Prezzo {px} · sessione {quote.session}\n"
+            if pct is not None and pct > 0:
+                alert_tags.append("In crescita oggi")
+        if scored.source == "wire_rss":
+            alert_tags.append("Trade Republic US")
         alerts.append(
             Alert(
                 key=f"news|{scored.ticker}|{ident}",
@@ -509,8 +522,10 @@ def build_alerts(
                 titolo=f"{scored.ticker} — catalizzatore wire",
                 body=(
                     f"{scored.headline}\n"
+                    f"{price_line}"
                     f"{pub} · tag: {tags}\n"
-                    f"Driver: {driver}"
+                    f"Driver: {driver}\n"
+                    "Comprabile su Trade Republic (universo US) se listato."
                 ),
                 severity="high" if scored.score >= 7 else "medium",
                 url=scored.url or None,

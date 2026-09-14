@@ -16,7 +16,7 @@ from finance_alert.aggregator import (
     overlay_volume_stats,
     source_status,
 )
-from finance_alert.config import AppConfig, load_config
+from finance_alert.config import AppConfig, Ticker, load_config
 from finance_alert.dedupe import (
     is_semantic_duplicate,
     load_sent_store,
@@ -195,6 +195,37 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
     quotes = overlay_extended_hours(quotes, symbols)
     quotes = _macro_quotes(cfg, quotes)
     quotes = overlay_volume_stats(quotes)
+
+    # News TR-universe: scarica quote per i ticker colpiti fuori watchlist (comprabili oggi)
+    tr_rules = cfg.rules.tr_universe
+    if tr_rules.enabled and tr_rules.fetch_quotes_for_hits and news:
+        hit_tickers: list[str] = []
+        seen_hits: set[str] = set()
+        for item in news:
+            t = (item.ticker or "").strip().upper()
+            if not t or t in seen_hits or t in quotes:
+                continue
+            if item.source != "wire_rss":
+                continue
+            seen_hits.add(t)
+            hit_tickers.append(t)
+            if len(hit_tickers) >= tr_rules.max_quote_hits:
+                break
+        if hit_tickers:
+            extra = fetch_quotes(hit_tickers)
+            extra = overlay_extended_hours(extra, hit_tickers)
+            extra = overlay_volume_stats(extra)
+            quotes.update(extra)
+            # Aggiungi al cfg.watchlist virtuale i nomi per _name()
+            for t in hit_tickers:
+                if cfg.by_symbol(t) is None:
+                    watchlist.append(Ticker(ticker=t))
+            cfg = AppConfig(
+                watchlist=watchlist,
+                rules=cfg.rules,
+                edgar=cfg.edgar,
+                clusters=cfg.clusters,
+            )
 
     index_moves = fetch_index_moves(cfg.rules.macro.etfs, quotes)
     min_score = effective_min_setup_score(cfg.rules.macro, index_moves)

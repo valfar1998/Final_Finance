@@ -352,6 +352,29 @@ rules:
   peer_lag_leader_pct: 2.5
   peer_lag_max_pct: 1.0
 
+  # Universo dinamico gratis (oltre la watchlist fissa):
+  # - Yahoo screener: day_gainers / most_actives / small_cap_gainers
+  # - Polygon free: movers EOD giorno precedente (grouped daily). Snapshot live = a pagamento → non usato.
+  premarket:
+    enabled: true
+    max_extra: 30
+    yahoo_enabled: true
+    yahoo_screens: [day_gainers, most_actives, small_cap_gainers]
+    yahoo_count_per_screen: 25
+    polygon_enabled: true
+    polygon_min_pct: 5.0
+    polygon_min_volume: 1000000
+    polygon_min_price: 2.0
+    upside_only: true
+
+  # Azioni USA su Trade Republic (~3k): news wire su tutto l'universo (non scan prezzo su tutti)
+  tr_universe:
+    enabled: true
+    wire_match: true
+    fetch_quotes_for_hits: true
+    max_quote_hits: 40
+    min_name_len: 5
+
   surprise_eps_pct: 3.0
   surprise_revenue_pct: 2.5
   earnings_lookahead_hours: 48

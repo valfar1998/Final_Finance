@@ -9,8 +9,10 @@ from finance_alert.config import load_config
 from finance_alert.engine import mark_sent, run_scan
 from finance_alert.env import load_env
 from finance_alert.format import format_alerts, format_test_ping
+from finance_alert.premarket_universe import discover_hot_symbols
 from finance_alert.telegram import load_credentials, send_message
 from finance_alert.unified_cli import cmd_analyze, cmd_regulatory, cmd_screen
+from finance_alert.watchlist_resolver import resolve_scan_symbols
 
 
 def _print(obj) -> None:
@@ -67,6 +69,36 @@ def cmd_scan(*, dry_run: bool) -> int:
     return 0
 
 
+def cmd_premarket() -> int:
+    """Mostra candidati universo premarket (Yahoo screener + Polygon EOD), senza scan completo."""
+    cfg = load_config()
+    pm = cfg.rules.premarket
+    if not pm.enabled:
+        _print({"enabled": False, "hint": "abilita rules.premarket.enabled in config/watchlist.yaml"})
+        return 0
+    disc = discover_hot_symbols(pm)
+    symbols, _ = resolve_scan_symbols(cfg)
+    core = {t.ticker for t in cfg.watchlist}
+    extras = [s for s in symbols if s not in core]
+    _print(
+        {
+            "enabled": True,
+            "yahoo_count": len(disc.yahoo),
+            "polygon_count": len(disc.polygon),
+            "merged": disc.merged,
+            "scan_total": len(symbols),
+            "scan_extras": extras,
+            "sources": {
+                "yahoo_screener": True,
+                "polygon_key": bool(source_status().get("polygon")),
+                "polygon_snapshot_live": False,
+                "note": "Polygon free = prev-day grouped daily; snapshot live richiede piano a pagamento",
+            },
+        }
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         try:
@@ -78,6 +110,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="calcola senza inviare")
     parser.add_argument("--test", action="store_true", help="ping di prova sul bot")
     parser.add_argument("--status", action="store_true", help="mostra fonti e watchlist")
+    parser.add_argument(
+        "--premarket",
+        action="store_true",
+        help="mostra universo premarket gratis (Yahoo screener + Polygon EOD)",
+    )
+    parser.add_argument(
+        "--sync-tr-universe",
+        action="store_true",
+        help="scarica PDF Trade Republic US e aggiorna data/tr_us_universe.json",
+    )
     parser.add_argument("--analyze", metavar="TICKER", help="analisi unificata score + buy target")
     parser.add_argument("--regulatory", metavar="TICKER", help="check regolatori (FCA/AMF/ESMA/...)")
     parser.add_argument("--screen", action="store_true", help="screen watchlist + screener_tickers")
@@ -95,6 +137,13 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_screen(update_watchlist=args.update_watchlist)
     if args.status:
         return cmd_status()
+    if args.premarket:
+        return cmd_premarket()
+    if getattr(args, "sync_tr_universe", False):
+        from finance_alert.tr_universe import sync_from_pdf
+
+        _print(sync_from_pdf(map_limit=200, download=True))
+        return 0
     if args.test:
         return cmd_test()
     return cmd_scan(dry_run=args.dry_run)

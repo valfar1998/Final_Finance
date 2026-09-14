@@ -16,6 +16,11 @@ from finance_alert.models import NewsItem, Quote, parse_num
 
 CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
 RSS = "https://feeds.finance.yahoo.com/rss/2.0/headline"
+SCREENER = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved"
+
+# Screener Yahoo gratis (no API key). Non esiste uno screen dedicato “premarket”;
+# day_gainers / most_actives catturano titoli già caldi in sessione estesa.
+DEFAULT_PREMARKET_SCREENS = ("day_gainers", "most_actives", "small_cap_gainers")
 
 # Cache breve delle risposte chart (session + momentum condividono le barre 5m).
 _CHART_TTL_SEC = 55.0
@@ -107,6 +112,57 @@ def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
         return {}
     results = map_parallel(fetch_quote, tickers, max_workers=min(6, len(tickers)))
     return {q.ticker: q for q in results if q is not None}
+
+
+def fetch_screener_symbols(
+    scr_ids: list[str] | tuple[str, ...] | None = None,
+    *,
+    count: int = 25,
+) -> list[str]:
+    """Tickers da screener Yahoo predefined (gratis, 1 HTTP per screen)."""
+    screens = list(scr_ids or DEFAULT_PREMARKET_SCREENS)
+    if not screens or count <= 0:
+        return []
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for scr in screens:
+        sid = str(scr or "").strip()
+        if not sid:
+            continue
+        try:
+            data = get_json(
+                SCREENER,
+                params={
+                    "scrIds": sid,
+                    "count": min(int(count), 100),
+                    "formatted": "false",
+                    "lang": "en-US",
+                    "region": "US",
+                },
+                headers={"User-Agent": DEFAULT_UA, "Referer": "https://finance.yahoo.com/"},
+            )
+        except (HttpError, OSError, TimeoutError, ValueError):
+            continue
+        rows = ((data or {}).get("finance") or {}).get("result") or []
+        if not isinstance(rows, list) or not rows:
+            continue
+        quotes = rows[0].get("quotes") if isinstance(rows[0], dict) else None
+        if not isinstance(quotes, list):
+            continue
+        for row in quotes:
+            if not isinstance(row, dict):
+                continue
+            sym = str(row.get("symbol") or "").strip().upper()
+            if not sym or sym in seen:
+                continue
+            # Evita warrant/unit/right e ticker esotici
+            if any(sym.endswith(sfx) for sfx in ("-W", "-U", "-R", ".W", ".U", ".R")):
+                continue
+            if len(sym) > 5 and not sym.endswith((".HK", ".SS", ".SZ", ".KS", ".T", ".L")):
+                continue
+            seen.add(sym)
+            ordered.append(sym)
+    return ordered
 
 
 def _session_from_meta(meta: dict, now_ts: int) -> str:

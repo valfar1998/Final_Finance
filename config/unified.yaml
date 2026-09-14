@@ -9,11 +9,11 @@ unified:
   include_regulatory: true
   screener_min_score: 7.0
 
-  # Watchlist già a 100 titoli growth/quality → niente screener/dynamic extra
+  # Watchlist 100 + fino a 30 hot premarket (Yahoo screener / Polygon EOD)
   include_global_screener: false
   use_dynamic_watchlist: false
   dynamic_min_score: 6.0
-  max_scan_symbols: 100
+  max_scan_symbols: 130
 
   # Riserva (solo se riattivi include_global_screener)
   screener_tickers:

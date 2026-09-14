@@ -14,6 +14,8 @@ data/cik_cache.json
 data/rvol_baseline.json
 data/performance_tracker.json
 data/quant_platform.db
+data/tr_universe_de.pdf
+data/tr_us_stocks.json
 stock_analysis/data/
 stock_analysis/output/*.txt
 finance_analyzer/backend/data/
