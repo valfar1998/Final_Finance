@@ -1,4 +1,4 @@
-"""Feed RSS wire gratuiti: PR Newswire, GlobeNewswire (+ match universo Trade Republic US)."""
+"""Feed RSS wire gratuiti (PR Newswire multi-categoria) + match Trade Republic US."""
 
 from __future__ import annotations
 
@@ -9,14 +9,44 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
 from finance_alert.config import Ticker
-from finance_alert.http import get_feed
+from finance_alert.http import get_feed, map_parallel
 from finance_alert.models import NewsItem
 
-# Feed pubblici stabili (endpoint aperti, UA browser via get_feed)
+# Feed pubblici stabili. GlobeNewswire spesso vuoto/bloccato → tenuto ma fail-soft.
 WIRE_FEEDS: list[tuple[str, str, str]] = [
     (
         "PR Newswire",
         "https://www.prnewswire.com/rss/news-releases-list.rss",
+        "https://www.prnewswire.com/",
+    ),
+    (
+        "PR Newswire",
+        "https://www.prnewswire.com/rss/financial-services-latest-news/financial-services-latest-news-list.rss",
+        "https://www.prnewswire.com/",
+    ),
+    (
+        "PR Newswire",
+        "https://www.prnewswire.com/rss/business-technology-latest-news/business-technology-latest-news-list.rss",
+        "https://www.prnewswire.com/",
+    ),
+    (
+        "PR Newswire",
+        "https://www.prnewswire.com/rss/consumer-technology-latest-news/consumer-technology-latest-news-list.rss",
+        "https://www.prnewswire.com/",
+    ),
+    (
+        "PR Newswire",
+        "https://www.prnewswire.com/rss/health-latest-news/health-latest-news-list.rss",
+        "https://www.prnewswire.com/",
+    ),
+    (
+        "PR Newswire",
+        "https://www.prnewswire.com/rss/energy-latest-news/energy-latest-news-list.rss",
+        "https://www.prnewswire.com/",
+    ),
+    (
+        "PR Newswire",
+        "https://www.prnewswire.com/rss/automotive-transportation-latest-news/automotive-transportation-latest-news-list.rss",
         "https://www.prnewswire.com/",
     ),
     (
@@ -25,9 +55,16 @@ WIRE_FEEDS: list[tuple[str, str, str]] = [
         "GlobeNewswire%20-%20Earnings%20Releases",
         "https://www.globenewswire.com/",
     ),
+    (
+        "GlobeNewswire",
+        "https://www.globenewswire.com/RssFeed/subjectcode/4-Mergers%20and%20Acquisitions/feedTitle/"
+        "GlobeNewswire%20-%20Mergers%20and%20Acquisitions",
+        "https://www.globenewswire.com/",
+    ),
 ]
 
-_FEED_TTL_SEC = 120.0
+_FEED_TTL_SEC = 60.0
+_MAX_ITEMS_PER_FEED = 50
 _feed_cache: dict[str, tuple[float, list[dict[str, str | datetime | None]]]] = {}
 
 
@@ -73,7 +110,7 @@ def _parse_feed_xml(xml: str) -> list[dict[str, str | datetime | None]]:
         nodes = root.findall(".//item") or root.findall(".//{*}entry")
 
     rows: list[dict[str, str | datetime | None]] = []
-    for node in nodes[:40]:
+    for node in nodes[:_MAX_ITEMS_PER_FEED]:
         title = (node.findtext("title") or "").strip()
         if not title:
             continue
@@ -92,13 +129,14 @@ def _parse_feed_xml(xml: str) -> list[dict[str, str | datetime | None]]:
 
 
 def _load_feed(publisher: str, url: str, referer: str) -> list[dict[str, str | datetime | None]]:
-    del publisher  # usato solo dal caller per NewsItem.publisher
+    del publisher
     now = time.time()
     hit = _feed_cache.get(url)
     if hit and now - hit[0] < _FEED_TTL_SEC:
         return hit[1]
     xml = get_feed(url, referer=referer)
     if not xml:
+        _feed_cache[url] = (now, [])
         return []
     rows = _parse_feed_xml(xml)
     _feed_cache[url] = (now, rows)
@@ -117,7 +155,6 @@ def _match_ticker(text: str, watchlist: list[Ticker]) -> str | None:
 
 
 def _match_tr_universe(headline: str) -> str | None:
-    """Ticker Yahoo se la headline matcha un'azione USA su Trade Republic."""
     from finance_alert.tr_universe import get_matcher, resolve_ticker
 
     matcher = get_matcher()
@@ -132,26 +169,34 @@ def _match_tr_universe(headline: str) -> str | None:
     return tick or None
 
 
+def _resolve_headline_ticker(headline: str, watchlist: list[Ticker], use_tr: bool) -> str | None:
+    ticker = _match_ticker(headline, watchlist) if watchlist else None
+    if ticker is None and use_tr:
+        ticker = _match_tr_universe(headline)
+    return ticker
+
+
 def fetch_news(watchlist: list[Ticker], *, use_tr_universe: bool = True) -> list[NewsItem]:
     """
-    Scarica feed wire e filtra per watchlist e/o universo Trade Republic US.
-
-    Con use_tr_universe=True (default) le breaking news su titoli TR-US
-    generano item anche fuori dalla watchlist fissa — utili per comprare lo stesso giorno.
+    Scarica feed wire in parallelo e filtra per watchlist / universo Trade Republic US.
     """
     items: list[NewsItem] = []
     seen: set[str] = set()
 
-    for publisher, url, referer in WIRE_FEEDS:
-        for row in _load_feed(publisher, url, referer):
+    def _one(feed: tuple[str, str, str]) -> list[tuple[str, dict]]:
+        publisher, url, referer = feed
+        rows = _load_feed(publisher, url, referer)
+        return [(publisher, row) for row in rows]
+
+    batches = map_parallel(_one, list(WIRE_FEEDS), max_workers=min(6, len(WIRE_FEEDS)))
+    for batch in batches:
+        for publisher, row in batch:
             headline = str(row.get("headline") or "")
             link = str(row.get("url") or "")
             key = (link or headline).strip().lower()
             if not headline or not key or key in seen:
                 continue
-            ticker = _match_ticker(headline, watchlist) if watchlist else None
-            if ticker is None and use_tr_universe:
-                ticker = _match_tr_universe(headline)
+            ticker = _resolve_headline_ticker(headline, watchlist, use_tr_universe)
             if ticker is None:
                 continue
             seen.add(key)

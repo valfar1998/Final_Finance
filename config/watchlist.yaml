@@ -379,9 +379,9 @@ rules:
   surprise_revenue_pct: 2.5
   earnings_lookahead_hours: 48
 
-  news_max_age_hours: 2
-  news_min_score: 7
-  news_require_wire: true
+  news_max_age_hours: 3
+  news_min_score: 6
+  news_require_wire: false
   news_keywords:
     - [guidance raised, 8]
     - [raises guidance, 8]
@@ -426,6 +426,11 @@ rules:
     - associated press
     - benzinga
     - wall street journal
+    - marketwatch
+    - barron
+    - the fly
+    - mt newswires
+    - dow jones
   news_opinion_publishers:
     - seekingalpha
     - seeking alpha

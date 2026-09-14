@@ -173,14 +173,15 @@ def _dedupe_news(items: list[NewsItem]) -> list[NewsItem]:
 def _news_for_ticker(args: tuple[str, str, str]) -> list[NewsItem]:
     ticker, frm, to = args
     batch: list[NewsItem] = []
+    # Benzinga già coperto dal feed globale: per-ticker solo se serve profondità
     if benzinga.available():
-        batch.extend(benzinga.fetch_news(ticker))
+        batch.extend(benzinga.fetch_news(ticker, page_size=8))
     if finnhub.available():
         batch.extend(finnhub.fetch_news(ticker, frm, to))
     if polygon.available() and len(batch) < 5:
         batch.extend(polygon.fetch_news(ticker))
     if marketaux.available() and len(batch) < 8:
-        batch.extend(marketaux.fetch_news(ticker))
+        batch.extend(marketaux.fetch_news(ticker, limit=8))
     if newsapi.available() and len(batch) < 8:
         batch.extend(newsapi.fetch_news(ticker, frm))
     if fmp.available() and len(batch) < 5:
@@ -190,16 +191,77 @@ def _news_for_ticker(args: tuple[str, str, str]) -> list[NewsItem]:
     return batch
 
 
+def _tr_ticker_set() -> set[str]:
+    try:
+        return {i.ticker.upper() for i in tr_us.load_equity_universe() if i.ticker}
+    except Exception:
+        return set()
+
+
+def _filter_relevant_news(
+    items: list[NewsItem],
+    *,
+    watchlist_tickers: set[str],
+    tr_tickers: set[str],
+    use_tr: bool,
+) -> list[NewsItem]:
+    """Tieni news su watchlist / universo TR (ticker mappati) o match nome TR."""
+    out: list[NewsItem] = []
+    for item in items:
+        tick = (item.ticker or "").strip().upper()
+        if tick and tick in watchlist_tickers:
+            out.append(item)
+            continue
+        if use_tr and tick and tick in tr_tickers:
+            out.append(item)
+            continue
+        if use_tr and item.source in {"benzinga", "finnhub", "marketaux", "wire_rss"}:
+            # ticker non in mappa: prova match nome headline → TR
+            resolved = None
+            try:
+                from finance_alert.sources.wire_rss import _match_tr_universe
+
+                resolved = _match_tr_universe(item.headline)
+            except Exception:
+                resolved = None
+            if resolved:
+                item.ticker = resolved
+                out.append(item)
+    return out
+
+
 def fetch_news(cfg: AppConfig, now: datetime) -> list[NewsItem]:
     today = now.date()
     frm = (today - timedelta(days=1)).isoformat()
     to = today.isoformat()
     use_tr = bool(cfg.rules.tr_universe.enabled and cfg.rules.tr_universe.wire_match)
-    items: list[NewsItem] = list(wire_rss.fetch_news(cfg.watchlist, use_tr_universe=use_tr))
+    watch_set = {t.ticker.upper() for t in cfg.watchlist}
+    tr_set = _tr_ticker_set() if use_tr else set()
+
+    items: list[NewsItem] = []
+
+    # 1) Fonti GLOBALI (basso scarto) — prima Benzinga wire
+    if benzinga.available():
+        items.extend(benzinga.fetch_latest_news(page_size=50))
+    items.extend(wire_rss.fetch_news(cfg.watchlist, use_tr_universe=use_tr))
+    if finnhub.available():
+        items.extend(finnhub.fetch_market_news(limit=80))
+    if marketaux.available():
+        items.extend(marketaux.fetch_latest_news(limit=20))
+
+    items = _filter_relevant_news(
+        items,
+        watchlist_tickers=watch_set,
+        tr_tickers=tr_set,
+        use_tr=use_tr,
+    )
+
+    # 2) Approfondimento per-ticker (watchlist / hot scan)
     jobs = [(ticker, frm, to) for ticker in cfg.symbols]
     batches = map_parallel(_news_for_ticker, jobs, max_workers=min(6, max(1, len(jobs))))
     for batch in batches:
         items.extend(batch)
+
     cutoff = now.astimezone(timezone.utc) - timedelta(hours=cfg.rules.news_max_age_hours)
     fresh: list[NewsItem] = []
     for item in _dedupe_news(items):

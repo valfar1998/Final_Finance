@@ -133,3 +133,55 @@ def fetch_news(ticker: str, from_date: str, to_date: str) -> list[NewsItem]:
             )
         )
     return items
+
+
+def fetch_market_news(*, category: str = "general", limit: int = 80) -> list[NewsItem]:
+    """News di mercato Finnhub (campo related = ticker CSV)."""
+    if not available():
+        return []
+    try:
+        data = get_json(
+            f"{BASE}/news",
+            params={"category": category, "token": _token()},
+        )
+    except (HttpError, OSError, TimeoutError, ValueError):
+        return []
+    if not isinstance(data, list):
+        return []
+    items: list[NewsItem] = []
+    seen: set[str] = set()
+    for row in data[: max(1, limit)]:
+        if not isinstance(row, dict):
+            continue
+        headline = str(row.get("headline") or "").strip()
+        if not headline:
+            continue
+        related = str(row.get("related") or "").strip().upper()
+        tickers = [t.strip() for t in related.split(",") if t.strip()]
+        if not tickers:
+            continue
+        published = None
+        raw_t = row.get("datetime")
+        if raw_t:
+            try:
+                published = datetime.fromtimestamp(int(raw_t), tz=timezone.utc)
+            except (TypeError, ValueError, OSError):
+                published = None
+        url = str(row.get("url") or "")
+        publisher = str(row.get("source") or "Finnhub")
+        for tick in tickers[:5]:
+            key = f"{tick}|{(url or headline).lower()}"
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(
+                NewsItem(
+                    ticker=tick,
+                    headline=headline,
+                    url=url,
+                    published=published,
+                    source="finnhub",
+                    publisher=publisher,
+                )
+            )
+    return items

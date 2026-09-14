@@ -32,6 +32,10 @@ def fetch_news(ticker: str, *, limit: int = 15) -> list[NewsItem]:
         )
     except (HttpError, OSError, TimeoutError, ValueError):
         return []
+    return _parse_rows(data, fallback_ticker=us)
+
+
+def _parse_rows(data: object, *, fallback_ticker: str = "") -> list[NewsItem]:
     if not isinstance(data, dict):
         return []
     rows = data.get("data") or []
@@ -59,14 +63,47 @@ def fetch_news(ticker: str, *, limit: int = 15) -> list[NewsItem]:
             publisher = source_block
         elif isinstance(source_block, dict):
             publisher = str(source_block.get("name") or "")
-        items.append(
-            NewsItem(
-                ticker=ticker,
-                headline=headline,
-                url=str(row.get("url") or ""),
-                published=published,
-                source="marketaux",
-                publisher=publisher,
+        tickers: list[str] = []
+        entities = row.get("entities")
+        if isinstance(entities, list):
+            for ent in entities:
+                if not isinstance(ent, dict):
+                    continue
+                sym = str(ent.get("symbol") or "").strip().upper()
+                if sym:
+                    tickers.append(sym)
+        if not tickers and fallback_ticker:
+            tickers = [fallback_ticker]
+        for tick in tickers[:4] or ([fallback_ticker] if fallback_ticker else []):
+            if not tick:
+                continue
+            items.append(
+                NewsItem(
+                    ticker=tick,
+                    headline=headline,
+                    url=str(row.get("url") or ""),
+                    published=published,
+                    source="marketaux",
+                    publisher=publisher,
+                )
             )
-        )
     return items
+
+
+def fetch_latest_news(*, limit: int = 25) -> list[NewsItem]:
+    """Ultime news Marketaux senza filtro simbolo (free tier: poche req/giorno)."""
+    if not available():
+        return []
+    try:
+        data = get_json(
+            BASE,
+            params={
+                "language": "en",
+                "filter_entities": "true",
+                "limit": min(int(limit), 50),
+                "api_token": env_key("MARKETAUX_API_TOKEN"),
+            },
+        )
+    except (HttpError, OSError, TimeoutError, ValueError):
+        return []
+    return _parse_rows(data)
