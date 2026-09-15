@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -88,6 +89,9 @@ def get_json(
                 time.sleep(0.8 * (attempt + 1))
                 continue
             raise
+        except http.client.InvalidURL as exc:
+            # Python 3.11+: InvalidURL non è più ValueError → non deve far crashare lo scan
+            raise ValueError(str(exc)) from exc
     if last_exc:
         raise last_exc
     return None

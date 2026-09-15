@@ -155,6 +155,7 @@ def _match_ticker(text: str, watchlist: list[Ticker]) -> str | None:
 
 
 def _match_tr_universe(headline: str) -> str | None:
+    from finance_alert.models import is_quoteable_ticker
     from finance_alert.tr_universe import get_matcher, resolve_ticker
 
     matcher = get_matcher()
@@ -166,7 +167,9 @@ def _match_tr_universe(headline: str) -> str | None:
     tick = (inst.ticker or "").strip().upper()
     if not tick:
         tick = (resolve_ticker(inst.isin) or "").strip().upper()
-    return tick or None
+    if not tick or not is_quoteable_ticker(tick):
+        return None
+    return tick
 
 
 def _resolve_headline_ticker(headline: str, watchlist: list[Ticker], use_tr: bool) -> str | None:

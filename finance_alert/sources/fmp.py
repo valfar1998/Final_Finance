@@ -4,7 +4,7 @@ import time
 
 from finance_alert.env import env_key
 from finance_alert.http import HttpError, get_json
-from finance_alert.models import EarningsEvent, NewsItem, Quote, parse_num
+from finance_alert.models import EarningsEvent, NewsItem, Quote, is_quoteable_ticker, parse_num
 
 BASE = "https://financialmodelingprep.com/api/v3"
 
@@ -24,7 +24,10 @@ def _us(ticker: str) -> str:
 def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
     if not available() or not tickers:
         return {}
-    joined = ",".join(_us(t) for t in tickers)
+    clean = [t for t in tickers if is_quoteable_ticker(t)]
+    if not clean:
+        return {}
+    joined = ",".join(_us(t) for t in clean)
     try:
         data = get_json(f"{BASE}/quote/{joined}", params={"apikey": _key()})
     except (HttpError, OSError, TimeoutError, ValueError):
@@ -32,7 +35,7 @@ def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
     if not isinstance(data, list):
         return {}
     out: dict[str, Quote] = {}
-    by_us = {_us(t): t for t in tickers}
+    by_us = {_us(t): t for t in clean}
     for row in data:
         if not isinstance(row, dict):
             continue

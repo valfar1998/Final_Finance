@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from finance_alert.env import env_key
 from finance_alert.http import HttpError, get_json
-from finance_alert.models import Quote, parse_num
+from finance_alert.models import Quote, is_quoteable_ticker, parse_num
 
 BASE = "https://api.twelvedata.com"
 
@@ -15,7 +15,10 @@ def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
     """Una sola richiesta batch (symbol=AAPL,MSFT,...) quando possibile."""
     if not available() or not tickers:
         return {}
-    by_us = {t.split(".")[0].upper(): t for t in tickers}
+    clean = [t for t in tickers if is_quoteable_ticker(t)]
+    if not clean:
+        return {}
+    by_us = {t.split(".")[0].upper(): t for t in clean}
     symbols = ",".join(by_us.keys())
     try:
         data = get_json(

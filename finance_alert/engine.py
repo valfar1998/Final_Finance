@@ -199,6 +199,8 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
     # News TR-universe: scarica quote per i ticker colpiti fuori watchlist (comprabili oggi)
     tr_rules = cfg.rules.tr_universe
     if tr_rules.enabled and tr_rules.fetch_quotes_for_hits and news:
+        from finance_alert.models import is_quoteable_ticker
+
         hit_tickers: list[str] = []
         seen_hits: set[str] = set()
         for item in news:
@@ -206,6 +208,9 @@ def run_scan(cfg: AppConfig | None = None) -> ScanResult:
             if not t or t in seen_hits or t in quotes:
                 continue
             if item.source != "wire_rss":
+                continue
+            # OpenFIGI a volte mappa preferred/perp con spazi → InvalidURL su FMP
+            if not is_quoteable_ticker(t):
                 continue
             seen_hits.add(t)
             hit_tickers.append(t)

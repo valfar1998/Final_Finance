@@ -1,8 +1,27 @@
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
+
+# Base ticker sicuro per path/query API (no spazi / preferred / perp OpenFIGI).
+_QUOTEABLE_BASE = re.compile(r"^[A-Z0-9][A-Z0-9\-]{0,14}$")
+
+
+def is_quoteable_ticker(ticker: str) -> bool:
+    """False per simboli non equity (spazi, PERP, *) che rompono URL batch tipo FMP."""
+    raw = (ticker or "").strip().upper()
+    if not raw or not raw.isascii():
+        return False
+    if any(ch.isspace() or ord(ch) < 32 for ch in raw):
+        return False
+    if any(ch in raw for ch in (",", "*", "/", "=", "^")):
+        return False
+    base = raw.split(".", 1)[0]
+    if not base or "PERP" in base:
+        return False
+    return bool(_QUOTEABLE_BASE.fullmatch(base))
 
 
 def _num(value: Any) -> float | None:

@@ -14,6 +14,7 @@ from typing import Any
 
 from finance_alert.env import ROOT
 from finance_alert.http import DEFAULT_UA
+from finance_alert.models import is_quoteable_ticker
 
 TR_PDF_URL = "https://assets.traderepublic.com/assets/files/DE/Instrument_Universe_DE_en.pdf"
 DEFAULT_PATH = ROOT / "data" / "tr_us_universe.json"
@@ -110,8 +111,10 @@ def _openfigi_map(isins: list[str], *, api_key: str = "") -> dict[str, str]:
             if pick is None:
                 pick = ticker
         if pick:
-            # Class share: BRK/B → BRK.B
-            mapped[isin] = pick.replace("/", ".")
+            # Class share: BRK/B → BRK.B; scarta preferred/perp con spazi
+            cleaned = pick.replace("/", ".")
+            if is_quoteable_ticker(cleaned):
+                mapped[isin] = cleaned
     return mapped
 
 
@@ -192,6 +195,8 @@ def load_universe(path: Path | None = None) -> list[TrInstrument]:
         isin = str(row.get("isin") or "").strip().upper()
         name = str(row.get("name") or "").strip()
         ticker = str(row.get("ticker") or "").strip().upper()
+        if ticker and not is_quoteable_ticker(ticker):
+            ticker = ""
         if not isin or not name:
             continue
         out.append(TrInstrument(isin=isin, name=name, ticker=ticker))
@@ -210,8 +215,10 @@ class NameMatcher:
         self._by_ticker: dict[str, TrInstrument] = {}
         self._name_patterns: list[tuple[re.Pattern[str], TrInstrument]] = []
         for inst in instruments:
-            if inst.ticker:
-                self._by_ticker[inst.ticker.upper()] = inst
+            tick = (inst.ticker or "").strip().upper()
+            # Solo ticker quoteable: evita match su "MSTR 12 PERP A" / bond OpenFIGI
+            if tick and is_quoteable_ticker(tick):
+                self._by_ticker[tick] = inst
             clean = _norm_name(inst.name)
             if len(clean) < min_name_len:
                 continue
@@ -235,6 +242,9 @@ class NameMatcher:
                 return inst
         for pat, inst in self._name_patterns:
             if pat.search(text):
+                # Nome matchato ma ticker OpenFIGI inutilizzabile → ignora
+                if inst.ticker and not is_quoteable_ticker(inst.ticker):
+                    continue
                 return inst
         return None
 
@@ -269,7 +279,7 @@ def resolve_ticker(isin: str, *, api_key: str = "") -> str | None:
     except Exception:
         return None
     tick = got.get(isin)
-    if not tick:
+    if not tick or not is_quoteable_ticker(tick):
         return None
     updated = [
         TrInstrument(isin=i.isin, name=i.name, ticker=tick if i.isin == isin else i.ticker)
