@@ -2,10 +2,8 @@ name: Telegram borsa alerts
 
 on:
   schedule:
-    # Premarket → after-hours USA: ogni 10 min (meno scarto news)
+    # Premarket → after-hours USA: ogni 10 min (run ~3.5–5 min → evita overlap del cron a 5)
     - cron: "*/10 8-23 * * 1-5"
-    # Open USA (~14–16 CET / 12–13 UTC): ogni 5 min
-    - cron: "0,5,10,15,20,25,30,35,40,45,50,55 12-13 * * 1-5"
     # Sab–dom: ogni 2 ore (news / filing)
     - cron: "0 */2 * * 0,6"
     # Digest pre-apertura USA (~07:30 ET)
