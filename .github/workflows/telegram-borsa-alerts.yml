@@ -24,9 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -35,7 +35,7 @@ jobs:
       - name: Dipendenze
         run: pip install -r requirements-cloud.txt
 
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         if: ${{ github.event.inputs.test != 'true' }}
         with:
           path: |
@@ -92,7 +92,7 @@ jobs:
             python scripts/notify_borsa.py
           fi
 
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v5
         if: always() && (hashFiles('data/telegram_alerts_sent.json') != '' || hashFiles('data/rvol_baseline.json') != '' || hashFiles('data/performance_tracker.json') != '')
         with:
           path: |
