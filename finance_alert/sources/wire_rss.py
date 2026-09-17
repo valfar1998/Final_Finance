@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -11,6 +12,18 @@ from email.utils import parsedate_to_datetime
 from finance_alert.config import Ticker
 from finance_alert.http import get_feed, map_parallel
 from finance_alert.models import NewsItem
+
+# Ticker espliciti in headline (preferiti rispetto al bare match).
+_EXPLICIT_TICKER = re.compile(
+    r"(?:NASDAQ|NYSE|AMEX|NYSEAMERICAN|OTC|NYSEARCA)\s*[:\s]\s*([A-Z]{1,5})\b"
+    r"|\$([A-Z]{1,5})\b",
+    re.IGNORECASE,
+)
+# "Corp V" / "Class A" / numeri romani — non sono ticker.
+_ROMAN_OR_CLASS = re.compile(
+    r"\b(?:corp(?:oration)?|inc|ltd|llc|acquisition|class|series|phase)\s+[IVXLC]\b",
+    re.IGNORECASE,
+)
 
 # Feed pubblici stabili. GlobeNewswire spesso vuoto/bloccato → tenuto ma fail-soft.
 WIRE_FEEDS: list[tuple[str, str, str]] = [
@@ -143,11 +156,54 @@ def _load_feed(publisher: str, url: str, referer: str) -> list[dict[str, str | d
     return rows
 
 
+def _normalize_headline(text: str) -> str:
+    """Decode HTML entities (&amp; → &) so ticker AMP non matcha M&amp;A."""
+    return html.unescape(text or "").replace("\xa0", " ").strip()
+
+
+def _explicit_tickers(headline: str) -> list[str]:
+    found: list[str] = []
+    for m in _EXPLICIT_TICKER.finditer(headline.upper()):
+        tick = (m.group(1) or m.group(2) or "").upper()
+        if tick and tick not in found:
+            found.append(tick)
+    return found
+
+
+def _bare_ticker_ok(ticker: str, headline_upper: str) -> bool:
+    """Ticker corti (V, F, …) solo se espliciti; evita 'Corp V' → Visa."""
+    tick = ticker.upper()
+    if len(tick) <= 2:
+        return tick in _explicit_tickers(headline_upper)
+    # Evita match su numerali romani / Class I, Corp V, ecc.
+    if _ROMAN_OR_CLASS.search(headline_upper) and re.search(
+        rf"\b(?:corp(?:oration)?|inc|ltd|llc|acquisition|class|series|phase)\s+{re.escape(tick)}\b",
+        headline_upper,
+    ):
+        return False
+    return True
+
+
 def _match_ticker(text: str, watchlist: list[Ticker]) -> str | None:
+    text = _normalize_headline(text)
     upper = text.upper()
+    explicit = set(_explicit_tickers(upper))
+    # 1) Se la headline dichiara NASDAQ: XYZ / $XYZ e sta in watchlist, preferiscilo.
+    by_tick = {item.ticker.upper(): item for item in watchlist}
+    for tick in explicit:
+        if tick in by_tick:
+            return by_tick[tick].ticker
+    # 2) Match per ticker (lunghi prima), con regole anti falso-positivo.
+    ordered = sorted(watchlist, key=lambda t: len(t.ticker), reverse=True)
+    for item in ordered:
+        tick = item.ticker.upper()
+        if not re.search(rf"(?<![A-Z0-9&]){re.escape(tick)}(?![A-Z0-9])", upper):
+            continue
+        if not _bare_ticker_ok(tick, upper):
+            continue
+        return item.ticker
+    # 3) Match per nome azienda.
     for item in watchlist:
-        if re.search(rf"\b{re.escape(item.ticker)}\b", upper):
-            return item.ticker
         name = (item.name or "").strip()
         if len(name) >= 4 and re.search(rf"\b{re.escape(name)}\b", text, re.IGNORECASE):
             return item.ticker
@@ -158,9 +214,19 @@ def _match_tr_universe(headline: str) -> str | None:
     from finance_alert.models import is_quoteable_ticker
     from finance_alert.tr_universe import get_matcher, resolve_ticker
 
+    headline = _normalize_headline(headline)
     matcher = get_matcher()
     if matcher is None:
         return None
+    # Preferisci ticker espliciti nel matcher TR.
+    explicit = _explicit_tickers(headline)
+    if explicit and matcher is not None:
+        for tick in explicit:
+            inst = matcher._by_ticker.get(tick.upper())
+            if inst is not None:
+                out = (inst.ticker or tick).strip().upper()
+                if is_quoteable_ticker(out):
+                    return out
     inst = matcher.match(headline)
     if inst is None:
         return None
@@ -169,10 +235,13 @@ def _match_tr_universe(headline: str) -> str | None:
         tick = (resolve_ticker(inst.isin) or "").strip().upper()
     if not tick or not is_quoteable_ticker(tick):
         return None
+    if not _bare_ticker_ok(tick, headline.upper()):
+        return None
     return tick
 
 
 def _resolve_headline_ticker(headline: str, watchlist: list[Ticker], use_tr: bool) -> str | None:
+    headline = _normalize_headline(headline)
     ticker = _match_ticker(headline, watchlist) if watchlist else None
     if ticker is None and use_tr:
         ticker = _match_tr_universe(headline)
@@ -194,7 +263,7 @@ def fetch_news(watchlist: list[Ticker], *, use_tr_universe: bool = True) -> list
     batches = map_parallel(_one, list(WIRE_FEEDS), max_workers=min(6, len(WIRE_FEEDS)))
     for batch in batches:
         for publisher, row in batch:
-            headline = str(row.get("headline") or "")
+            headline = _normalize_headline(str(row.get("headline") or ""))
             link = str(row.get("url") or "")
             key = (link or headline).strip().lower()
             if not headline or not key or key in seen:

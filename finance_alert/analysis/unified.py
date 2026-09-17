@@ -27,18 +27,22 @@ class UnifiedAnalysis:
 
     def summary_lines(self) -> list[str]:
         lines = [
-            f"📊 Score unificato: {self.unified_score:.1f}/10",
-            f"   Fondamentale: {self.fundamental_score:.0f}/100 | Quant: {self.quant_score:.1f}/10",
-            f"   Verdetto: {self.verdict}",
+            f"Score unificato: {self.unified_score:.1f}/10 "
+            f"(fond. {self.fundamental_score:.0f}/100 · quant {self.quant_score:.1f}/10)",
+            f"Verdetto di fondo: {self.verdict or 'n/d'} "
+            f"— valuta il titolo nel tempo, non conferma il trade di oggi.",
         ]
         if self.buy_target_price:
-            lines.append(f"   🎯 Prezzo acquisto consigliato: ${self.buy_target_price:.2f}")
+            lines.append(
+                f"Prezzo «interessante» di fondo: ${self.buy_target_price:.2f} "
+                f"(spesso sotto il prezzo attuale se già corsa)."
+            )
         elif self.buy_target_text:
-            lines.append(f"   🎯 Target: {self.buy_target_text[:80]}")
+            lines.append(f"Target di fondo: {self.buy_target_text[:80]}")
         if self.recommended_entry:
-            lines.append(f"   ⚡ Entry swing suggerita: ${self.recommended_entry:.2f}")
+            lines.append(f"Entry swing usata nel modello: ${self.recommended_entry:.2f}")
         for flag in self.flags[:3]:
-            lines.append(f"   ⚠ {flag}")
+            lines.append(f"⚠ {flag}")
         return lines
 
 

@@ -378,9 +378,9 @@ def build_alerts(
                     ticker=ticker,
                     titolo=f"{ticker} — {pct:+.1f}% {label}",
                     body=(
-                        f"{_name(cfg, ticker)} {price} · {rvol_txt} · {dv_txt} scambiati\n"
-                        "Gap fuori seduta con volume e liquidità sufficienti.\n"
-                        "Valuta ingresso solo se il movimento non è già eccessivo."
+                        f"{_name(cfg, ticker)} a {price} in {label} ({pct:+.1f}% vs chiusura).\n"
+                        f"Volume relativo {rvol_txt}, liquidità circa {dv_txt}.\n"
+                        "Fatto: gap fuori seduta con scambi sufficienti per uno swing breve."
                     ),
                     severity="high" if abs(pct) >= 3 else "medium",
                 )
@@ -523,9 +523,8 @@ def build_alerts(
                 body=(
                     f"{scored.headline}\n"
                     f"{price_line}"
-                    f"{pub} · tag: {tags}\n"
-                    f"Driver: {driver}\n"
-                    "Comprabile su Trade Republic (universo US) se listato."
+                    f"Fonte: {pub} · parole-chiave: {tags}\n"
+                    f"Motivo tecnico: {driver}"
                 ),
                 severity="high" if scored.score >= 7 else "medium",
                 url=scored.url or None,

@@ -416,6 +416,14 @@ rules:
     - "opinion"
     - "what to know"
     - "here's why"
+    - "class action"
+    - "shareholder alert"
+    - "hareholder alert"
+    - "investigation of"
+    - "investigating"
+    - "securities fraud"
+    - "lawsuit"
+    - "investor alert"
   news_boost_publishers:
     - reuters
     - bloomberg

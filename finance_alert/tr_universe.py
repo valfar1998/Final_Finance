@@ -230,15 +230,27 @@ class NameMatcher:
         self._name_patterns.sort(key=lambda x: len(x[1].name), reverse=True)
 
     def match(self, headline: str) -> TrInstrument | None:
-        text = (headline or "").strip()
+        import html
+
+        text = html.unescape((headline or "").strip())
         if not text:
             return None
         upper = text.upper()
-        # Ticker espliciti (4+ lettere o noti)
-        for ticker, inst in self._by_ticker.items():
-            if len(ticker) < 2:
+        # Preferisci (NASDAQ: XYZ) / $XYZ se presenti nell'universo.
+        for m in re.finditer(
+            r"(?:NASDAQ|NYSE|AMEX|NYSEAMERICAN|OTC|NYSEARCA)\s*[:\s]\s*([A-Z]{1,5})\b|\$([A-Z]{1,5})\b",
+            upper,
+        ):
+            tick = (m.group(1) or m.group(2) or "").upper()
+            inst = self._by_ticker.get(tick)
+            if inst is not None:
+                return inst
+        # Ticker bare: lunghi prima; len<=2 solo se espliciti (già gestiti sopra).
+        for ticker, inst in sorted(self._by_ticker.items(), key=lambda kv: len(kv[0]), reverse=True):
+            if len(ticker) < 3:
                 continue
-            if re.search(rf"(?<![A-Z0-9]){re.escape(ticker)}(?![A-Z0-9])", upper):
+            # (?<![A-Z0-9&]) evita match di AMP dentro M&AMP;A non decodificato.
+            if re.search(rf"(?<![A-Z0-9&]){re.escape(ticker)}(?![A-Z0-9])", upper):
                 return inst
         for pat, inst in self._name_patterns:
             if pat.search(text):

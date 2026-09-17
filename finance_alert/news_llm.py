@@ -67,8 +67,22 @@ PRIMARY_CATALYSTS = (
 )
 
 
+_NEGATIVE_CATALYST = (
+    "class action",
+    "shareholder alert",
+    "hareholder alert",
+    "investigation of",
+    "investigating",
+    "securities fraud",
+    "lawsuit",
+    "investor alert",
+)
+
+
 def _has_primary_catalyst(headline: str) -> bool:
     text = (headline or "").lower()
+    if any(neg in text for neg in _NEGATIVE_CATALYST):
+        return False
     return any(key in text for key in PRIMARY_CATALYSTS)
 
 

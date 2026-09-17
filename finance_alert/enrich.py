@@ -82,5 +82,5 @@ def build_context_block(analysis: UnifiedAnalysis) -> str:
     reg = analysis.details.get("regulatory") or {}
     region = reg.get("region")
     if region:
-        lines.append(f"   🌍 Regolatore: {region} | Penalty: -{analysis.regulatory_penalty:.1f}")
+        lines.append(f"Regolatore: {region} · penalty -{analysis.regulatory_penalty:.1f}")
     return "\n".join(lines)

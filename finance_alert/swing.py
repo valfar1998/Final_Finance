@@ -24,9 +24,17 @@ class SwingPlan:
         lines = [f"Setup swing: {self.score}/10 · {self.verdict}"]
         if self.entry_lo is not None and self.entry_hi is not None:
             lines.append(f"Ingresso ideale: ${self.entry_lo:.2f}–${self.entry_hi:.2f}")
-        if self.target is not None:
+        if self.target is not None and self.entry_lo is not None:
+            mid = (self.entry_lo + (self.entry_hi or self.entry_lo)) / 2.0
+            pct = (self.target - mid) / mid * 100.0 if mid else 0.0
+            lines.append(f"Target {self.horizon_days}g: ${self.target:.2f} ({pct:+.1f}% da ingresso)")
+        elif self.target is not None:
             lines.append(f"Target {self.horizon_days}g: ${self.target:.2f}")
-        if self.stop is not None:
+        if self.stop is not None and self.entry_lo is not None:
+            mid = (self.entry_lo + (self.entry_hi or self.entry_lo)) / 2.0
+            pct = (self.stop - mid) / mid * 100.0 if mid else 0.0
+            lines.append(f"Stop: ${self.stop:.2f} ({pct:+.1f}% da ingresso)")
+        elif self.stop is not None:
             lines.append(f"Stop: ${self.stop:.2f}")
         if self.note:
             lines.append(self.note)
