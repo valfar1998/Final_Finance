@@ -7,7 +7,20 @@ from datetime import datetime, timedelta, timezone
 from finance_alert.config import AppConfig
 from finance_alert.http import map_parallel
 from finance_alert.models import EarningsEvent, Filing, NewsItem, Quote
-from finance_alert.sources import benzinga, edgar, eodhd, finnhub, fmp, marketaux, newsapi, polygon, twelve, wire_rss, yahoo
+from finance_alert.sources import (
+    alpha_vantage,
+    benzinga,
+    edgar,
+    eodhd,
+    finnhub,
+    fmp,
+    marketaux,
+    newsapi,
+    polygon,
+    twelve,
+    wire_rss,
+    yahoo,
+)
 from finance_alert import tr_universe as tr_us
 
 
@@ -33,6 +46,7 @@ def source_status() -> dict[str, bool]:
         "benzinga": benzinga.available(),
         "newsapi": newsapi.available(),
         "marketaux": marketaux.available(),
+        "alpha_vantage": alpha_vantage.available(),
         "news_llm": llm_available(),
         "upstash_redis": redis_available(),
         "yahoo_chart": True,
@@ -83,6 +97,13 @@ def fetch_quotes(tickers: list[str]) -> dict[str, Quote]:
     missing = [t for t in tickers if t not in merged]
     if missing and eodhd.available():
         fb = eodhd.fetch_quotes(missing)
+        for ticker, quote in fb.items():
+            if ticker not in merged:
+                merged[ticker] = quote
+    # Alpha Vantage: ultimo fallback (quota free strettissima)
+    missing = [t for t in tickers if t not in merged]
+    if missing and alpha_vantage.available():
+        fb = alpha_vantage.fetch_quotes(missing)
         for ticker, quote in fb.items():
             if ticker not in merged:
                 merged[ticker] = quote
@@ -248,6 +269,8 @@ def fetch_news(cfg: AppConfig, now: datetime) -> list[NewsItem]:
         items.extend(finnhub.fetch_market_news(limit=80))
     if marketaux.available():
         items.extend(marketaux.fetch_latest_news(limit=20))
+    if alpha_vantage.available() and len(items) < 15:
+        items.extend(alpha_vantage.fetch_market_news(limit=15))
 
     items = _filter_relevant_news(
         items,

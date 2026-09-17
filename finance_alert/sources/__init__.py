@@ -1,4 +1,5 @@
 from finance_alert.sources import (
+    alpha_vantage,
     benzinga,
     edgar,
     eodhd,
@@ -13,6 +14,7 @@ from finance_alert.sources import (
 )
 
 __all__ = [
+    "alpha_vantage",
     "benzinga",
     "edgar",
     "eodhd",
